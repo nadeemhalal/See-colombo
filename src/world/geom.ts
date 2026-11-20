@@ -136,3 +136,33 @@ export function flatPolygon(mb: MeshBuilder, outer: Flat, holes: Flat[] | undefi
   for (const v of [contour, ...hs].flat()) mb.vert(v.x, y, v.y, 0, 1, 0, c);
   for (const t of tris) mb.triFacing(base + t[0], base + t[1], base + t[2], 0, 1, 0);
 }
+
+/**
+ * Instances split into square chunks so the frustum culls the ones off screen.
+ * `place(i, m4)` writes the matrix of item i; `color(i, c)` (optional) its colour.
+ */
+export function chunkedInstances<T extends { x: number; z: number }>(
+  items: T[], geo: THREE.BufferGeometry, mat: THREE.Material, chunk: number,
+  place: (item: T, m4: THREE.Matrix4) => void, color?: (item: T, c: THREE.Color) => void,
+): THREE.InstancedMesh[] {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const k = `${Math.floor(it.x / chunk)},${Math.floor(it.z / chunk)}`;
+    let g = groups.get(k);
+    if (!g) groups.set(k, (g = []));
+    g.push(it);
+  }
+  const out: THREE.InstancedMesh[] = [];
+  const m4 = new THREE.Matrix4(), c = new THREE.Color();
+  for (const list of groups.values()) {
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach((it, i) => {
+      place(it, m4);
+      mesh.setMatrixAt(i, m4);
+      if (color) { color(it, c); mesh.setColorAt(i, c); }
+    });
+    mesh.computeBoundingSphere();
+    out.push(mesh);
+  }
+  return out;
+}

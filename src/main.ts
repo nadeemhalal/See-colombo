@@ -9,6 +9,9 @@ import { buildBuildings } from './world/buildings';
 import { buildTrees } from './world/trees';
 import { buildLandmarks } from './world/landmarks';
 import { Environment } from './world/environment';
+import { StreetLights } from './world/streetlights';
+import { Post } from './world/post';
+import { setVehicleNight } from './traffic/models';
 import { Input } from './player/input';
 import { Character } from './player/character';
 import { PlayerController } from './player/controller';
@@ -56,7 +59,7 @@ async function main() {
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 30000);
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 9000);
 
   setLoading(`Raising ${city.buildings.length.toLocaleString()} buildings…`);
   await nextFrame();
@@ -73,6 +76,13 @@ async function main() {
   scene.add(buildTrees(city, collision));
   const landmarks = buildLandmarks(city, collision);
   scene.add(landmarks.group);
+  const lamps = new StreetLights(city, mask, collision);
+  scene.add(lamps.group);
+  const post = new Post(renderer, scene, camera);
+  // the player's tuk-tuk headlight
+  const headlight = new THREE.SpotLight(0xfff0d0, 0, 45, 0.55, 0.6, 1.4);
+  headlight.position.set(0, 1.05, 1.3);
+  headlight.target.position.set(0, 0, 14);
 
   setLoading('Drawing the map…');
   await nextFrame();
@@ -246,6 +256,7 @@ async function main() {
     renderer.getSize(size);
     if (w > 0 && h > 0 && (size.x !== w || size.y !== h)) {
       renderer.setSize(w, h, false);
+      post.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     }
@@ -360,8 +371,14 @@ async function main() {
     for (let i = trainCount; i < others.length; i++) onLine.push(others[i]);
     trains.update(dt, onLine);
 
-    env.update(minutes, dayOfYear, player.pos);
+    env.update(minutes, dayOfYear, player.pos, camera.position);
     buildings.setNight(env.night);
+    lamps.update(dt, env.night, player.pos);
+    setVehicleNight(THREE.MathUtils.smoothstep(env.night, 0.3, 0.8));
+    post.update(env.night);
+    if (driving && headlight.parent !== driving.group) { driving.group.add(headlight, headlight.target); }
+    if (!driving && headlight.parent) { headlight.parent.remove(headlight, headlight.target); }
+    headlight.intensity = driving ? THREE.MathUtils.smoothstep(env.night, 0.3, 0.8) * 120 : 0;
     landmarks.update(t, env.night);
     water.uniforms.uTime.value = t;
     water.uniforms.uSunDir.value.copy(env.sunDir);
@@ -374,7 +391,7 @@ async function main() {
     hud.update(dt, player.pos.x, player.pos.z, minutes);
     minimap.draw(player.pos.x, player.pos.z, follow.yaw, driving ? driving.heading : player.facing);
 
-    renderer.render(scene, camera);
+    post.render();
     input.endFrame();
 
     fpsN++; fpsT += dt;
@@ -382,7 +399,7 @@ async function main() {
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {

@@ -28,12 +28,70 @@ export function buildGround(city: CityData, mask: LandMask): THREE.Mesh {
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.needsUpdate = true;
 
-  const mat = new THREE.MeshStandardMaterial({ color: 0x8a8375, roughness: 1, alphaMap: tex, alphaTest: 0.5 });
+  const mat = surfaceMaterial('dirt', { color: 0x8f8574, roughness: 1, alphaMap: tex, alphaTest: 0.5 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';
   void city;
   return mesh;
+}
+
+// World-space surface detail in the shader, so large flat areas don't look like flat plastic.
+type Surface = 'asphalt' | 'pavement' | 'grass' | 'dirt' | 'footway';
+export function surfaceMaterial(kind: Surface, params: THREE.MeshStandardMaterialParameters) {
+  const m = new THREE.MeshStandardMaterial(params);
+  const KIND = { asphalt: 0, pavement: 1, grass: 2, dirt: 3, footway: 4 }[kind];
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWorldP;`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+        vWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWorldP;
+        float sh21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float sn(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(sh21(i), sh21(i + vec2(1, 0)), f.x), mix(sh21(i + vec2(0, 1)), sh21(i + vec2(1, 1)), f.x), f.y);
+        }
+        float fbm(vec2 p) { return sn(p) * 0.55 + sn(p * 2.1 + 3.7) * 0.28 + sn(p * 4.3 + 9.1) * 0.17; }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          vec2 w = vWorldP.xz;
+          float big = fbm(w * 0.045);
+          float mid = fbm(w * 0.35);
+          float fine = sn(w * 7.0);
+          ${KIND === 0 ? `
+          // asphalt: patched and faded, with darker oil and tar seams
+          diffuseColor.rgb *= 0.82 + 0.3 * big + 0.08 * fine;
+          float patchy = smoothstep(0.62, 0.66, sn(w * 0.09 + 4.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.72, patchy * 0.6);
+          float seam = 1.0 - smoothstep(0.0, 0.04, abs(sn(w * 0.05) - 0.5));
+          diffuseColor.rgb *= 1.0 - 0.18 * seam;` : ''}
+          ${KIND === 1 ? `
+          // pavement: concrete slabs with grimy joints
+          vec2 slab = fract(w / 0.9);
+          float joint = 1.0 - step(0.04, slab.x) * step(0.04, slab.y);
+          diffuseColor.rgb *= (0.88 + 0.18 * big + 0.06 * fine) * (1.0 - 0.25 * joint);
+          diffuseColor.rgb *= 0.92 + 0.12 * sh21(floor(w / 0.9));` : ''}
+          ${KIND === 2 ? `
+          // grass: patchy greens with dry, sunburnt areas
+          vec3 dry = vec3(0.62, 0.58, 0.36) * dot(diffuseColor.rgb, vec3(0.6));
+          float isGreen = step(diffuseColor.r * 1.05, diffuseColor.g);
+          diffuseColor.rgb = mix(diffuseColor.rgb, dry * 1.4, smoothstep(0.55, 0.85, big) * 0.6 * isGreen);
+          diffuseColor.rgb *= 0.78 + 0.3 * mid + 0.12 * fine;` : ''}
+          ${KIND === 3 ? `
+          // bare ground: reddish laterite soil and dust
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.42, 0.3), smoothstep(0.5, 0.8, big) * 0.35);
+          diffuseColor.rgb *= 0.82 + 0.25 * mid + 0.1 * fine;` : ''}
+          ${KIND === 4 ? `
+          diffuseColor.rgb *= 0.85 + 0.2 * mid + 0.1 * fine;` : ''}
+        }`);
+  };
+  m.customProgramCacheKey = () => `surface-${kind}`;
+  return m;
 }
 
 const AREA_COLORS: Record<string, number> = {
@@ -58,12 +116,22 @@ export function buildSurfaces(city: CityData): THREE.Group {
   const asphalt = new MeshBuilder();
   const foot = new MeshBuilder();
   const marks = new MeshBuilder();
+  const kerbs = new MeshBuilder();
   for (const r of city.roads) {
     const cls = ROAD_TYPES[r.t];
     if (cls === 'footway') { ribbon(foot, r.p, r.w, 0.045); continue; }
     if (cls !== 'service' && cls !== 'motorway') ribbon(pave, r.p, r.w + 3.6, 0.04);
     ribbon(asphalt, r.p, r.w, 0.07);
     if (cls === 'trunk' || cls === 'primary' || cls === 'secondary') dashes(marks, r.p, 0.15, 0.085, 3, 5);
+    // solid white edge lines on the main roads, and a raised kerb along every road with a pavement
+    if ((cls === 'trunk' || cls === 'primary') && r.w >= 7) {
+      ribbon(marks, r.p, 0.14, 0.085, false, r.w / 2 - 0.45);
+      ribbon(marks, r.p, 0.14, 0.085, false, -(r.w / 2 - 0.45));
+    }
+    if (cls !== 'service' && cls !== 'motorway') {
+      ribbon(kerbs, r.p, 0.22, 0.13, false, r.w / 2 + 0.11);
+      ribbon(kerbs, r.p, 0.22, 0.13, false, -(r.w / 2 + 0.11));
+    }
   }
 
   const ballast = new MeshBuilder();
@@ -86,10 +154,11 @@ export function buildSurfaces(city: CityData): THREE.Group {
     m.name = name;
     g.add(m);
   };
-  add(areaMb, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 'areas');
-  add(pave, new THREE.MeshStandardMaterial({ color: 0x9f998d, roughness: 0.95 }), 'pavements');
-  add(foot, new THREE.MeshStandardMaterial({ color: 0xb0a690, roughness: 1 }), 'footways');
-  add(asphalt, new THREE.MeshStandardMaterial({ color: 0x3b3b3e, roughness: 0.9 }), 'roads');
+  add(areaMb, surfaceMaterial('grass', { vertexColors: true, roughness: 1 }), 'areas');
+  add(pave, surfaceMaterial('pavement', { color: 0xa7a194, roughness: 0.95 }), 'pavements');
+  add(foot, surfaceMaterial('footway', { color: 0xb3a88f, roughness: 1 }), 'footways');
+  add(asphalt, surfaceMaterial('asphalt', { color: 0x3d3d40, roughness: 0.88 }), 'roads');
+  add(kerbs, new THREE.MeshStandardMaterial({ color: 0xc9c5bb, roughness: 0.9 }), 'kerbs');
   add(marks, new THREE.MeshStandardMaterial({ color: 0xe6e4da, roughness: 0.7 }), 'markings');
   add(ballast, new THREE.MeshStandardMaterial({ color: 0x6d655b, roughness: 1 }), 'ballast');
   add(steel, new THREE.MeshStandardMaterial({ color: 0x8c9198, roughness: 0.35, metalness: 0.7 }), 'rails');

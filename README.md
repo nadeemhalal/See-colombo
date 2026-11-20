@@ -14,6 +14,9 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Four outfits (O to switch, remembered in the browser): office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
 - Over-the-shoulder camera that pulls in when a wall is in the way
 - Real sun position for Colombo, day/night cycle, lit windows and shop signboards at night
+- Sri Lankan street look: faded pastel and colonial plaster walls with weather stains, clay tile hip roofs on houses and low buildings, roof parapets, floor ledges, blue and black rooftop water tanks, green shutters on colonial buildings, painted shop signboards and window grilles
+- Ground detail: patched asphalt, concrete pavement slabs, raised kerbs, white edge lines on main roads, sunburnt grass and red laterite soil
+- Lighting: about 4,500 orange sodium street lamps along the roads, with light pools on the ground and real lights near you; tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
 - Rotating minimap with street names, full-screen map with click-to-fast-travel
 - Drivable tuk-tuks: one beside the spawn point and one parked on the kerb near most landmarks. Arcade handling, reverse, brake, body lean, horn
 - Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only) and motorbikes. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
@@ -111,6 +114,8 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
 - Only tuk-tuks can be driven. Traffic vehicles can't be entered.
+- Bloom and real lamp lights cost some frame rate on slower GPUs. There is no graphics quality setting yet.
+- Buildings are still extruded footprints with shader detail. There are no balconies, verandah pillars or modelled shopfronts yet.
 - Only Phase 1 of the map. Areas south of Kollupitiya and east of Town Hall are not included yet.
 
 ## Deployment

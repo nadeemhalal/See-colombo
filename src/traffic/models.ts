@@ -23,6 +23,8 @@ function col(g: Part, hex: number): Part {
   const a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  // 1 = headlight, 2 = tail light: these glow at night
+  g.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(n).fill(hex === HEAD ? 1 : hex === TAIL ? 2 : 0), 1));
   g.deleteAttribute('uv');
   return g.index ? g.toNonIndexed() : g;
 }
@@ -158,8 +160,28 @@ export const VEHICLE_TYPES: VehicleType[] = [
     colors: [0x9c1c1c, 0x1a1a1a, 0x1f4f9c, 0xb8bcc0, 0xd8d8d8] },
 ];
 
-export const vehicleMaterial = () =>
-  new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.15 });
+const uVehicleNight = { value: 0 };
+/** 0 day .. 1 night: head and tail lights glow */
+export const setVehicleNight = (v: number) => (uVehicleNight.value = v);
+export const vehicleMaterial = () => {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.15 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = uVehicleNight;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute float aGlow; varying float vGlow;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vGlow = aGlow;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uNight; varying float vGlow;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (vGlow > 0.5 && vGlow < 1.5) totalEmissiveRadiance += vec3(1.0, 0.92, 0.75) * (0.15 + 3.5 * uNight);
+        else if (vGlow > 1.5) totalEmissiveRadiance += vec3(1.0, 0.06, 0.03) * (0.05 + 2.2 * uNight);`);
+  };
+  m.customProgramCacheKey = () => 'vehicle-glow';
+  return m;
+};
 
 const LIVERY = 0x8c2629; // Sri Lanka Railways maroon
 const CREAM = 0xe9dcb0;

@@ -100,8 +100,8 @@ export function buildTrees(city: CityData, collision: Collision): THREE.Group {
         trunk.setMatrixAt(n, m4);
         crown.setMatrixAt(n, m4);
         const v = ((i * 31) % 17) / 17;
-        if (palm) col.setRGB(0.36 + v * 0.08, 0.5 + v * 0.08, 0.2);
-        else col.setRGB(0.24 + v * 0.1, 0.42 + v * 0.1, 0.17 + v * 0.04);
+        if (palm) col.setRGB(0.4 + v * 0.1, 0.5 + v * 0.08, 0.2, THREE.SRGBColorSpace);
+        else col.setRGB(0.2 + v * 0.12, 0.38 + v * 0.12, 0.13 + v * 0.05, THREE.SRGBColorSpace);
         crown.setColorAt(n, col);
       });
       for (const m of [trunk, crown]) {
