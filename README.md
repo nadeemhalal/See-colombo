@@ -10,7 +10,8 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - ~5,400 real building footprints, with heights from OSM where tagged (e.g. Altair 240 m, One Galle Face 194 m)
 - ~9,200 generated "filler" buildings along streets where OSM has no footprints, so blocks aren't empty
 - Procedural Lotus Tower (with its night light show)
-- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake
+- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. Jointed figure with a face, hair and moustache, untucked shirt and rubber slippers. Walk and run cycles with knee and ankle motion, hip sway, arm swing, leaning into turns, landing squash, and looking around when idle
+- Four outfits (O to switch, remembered in the browser): office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
 - Over-the-shoulder camera that pulls in when a wall is in the way
 - Real sun position for Colombo, day/night cycle, lit windows and shop signboards at night
 - Rotating minimap with street names, full-screen map with click-to-fast-travel
@@ -67,6 +68,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | Q | Horn |
 | N | Mute sound |
 | R | Back to Galle Face Green |
+| O | Change outfit |
 | H | Show controls |
 | Esc | Pause |
 
@@ -98,7 +100,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 
 ## Known limitations
 
-- The character is built from simple shapes with code-driven animation. A rigged, animated model is the next visual upgrade.
+- The character is still made from simple shapes (no textures, skinning or cloth). A rigged model would look more realistic but needs a licensed or commissioned asset.
 - Filler buildings are guesses. They follow streets but won't match real buildings.
 - Building heights without OSM tags are estimated from footprint size and area.
 - Ground is flat (Colombo is mostly 0 to 10 m). Elevation data is planned for v0.3.

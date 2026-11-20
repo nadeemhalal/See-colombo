@@ -242,6 +242,7 @@ Because this is a real city with real communities, these need care before anythi
 - OSM has about 5,400 building footprints in the Phase 1 area, so roughly 9,200 filler buildings are generated along streets (PRD 6.3).
 - Ground is flat in v0.1; elevation model moved to v0.3.
 - The protagonist is a placeholder made from primitives with procedural animation; a rigged model is still to do.
+- Update (v0.2): the character was rebuilt as a jointed procedural figure (face, hair, collared or t-shirt, belt, slippers) with a full gait (hip, knee and ankle phases, arm counter-swing, pelvis sway, turn lean, landing squash, idle look-around) and four selectable outfits including a sarong. Still no external assets; a rigged glTF character remains an option.
 - Phase 1 area is about 5.3 × 4.5 km, larger than the 5 km² planned, to include Beira Lake, Town Hall and Viharamahadevi Park.
 
 ### 10.2 v0.2 progress (20 Nov 2026)

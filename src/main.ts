@@ -86,6 +86,8 @@ async function main() {
   const input = new Input(canvas);
   const character = new Character();
   scene.add(character.root);
+  try { character.setOutfit(Number(localStorage.getItem('seeColombo.outfit') ?? 0) || 0); } catch { /* storage blocked */ }
+  let outfitBannerT = 0;
   const player = new PlayerController(collision, mask);
   const follow = new FollowCamera(camera, collision);
 
@@ -266,6 +268,14 @@ async function main() {
       else { bigmap.show(player.pos.x, player.pos.z, player.facing); input.unlock(); }
     }
     if (input.wasPressed('KeyH')) $('help').classList.toggle('show');
+    if (input.wasPressed('KeyO')) {
+      const o = character.setOutfit(character.outfit + 1);
+      try { localStorage.setItem('seeColombo.outfit', String(character.outfit)); } catch { /* storage blocked */ }
+      $('banner').textContent = o.name;
+      $('banner').classList.add('show');
+      outfitBannerT = 2;
+    }
+    if (outfitBannerT > 0 && (outfitBannerT -= dt) <= 0) $('banner').classList.remove('show');
     if (input.wasPressed('KeyT')) { timeRate = timeRate === 1 ? 20 : 1; $('clock').classList.toggle('fast', timeRate > 1); }
     if (input.wasPressed('BracketRight')) minutes += 60;
     if (input.wasPressed('BracketLeft')) minutes -= 60;
