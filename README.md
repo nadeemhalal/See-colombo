@@ -19,8 +19,9 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Ground detail: patched asphalt, concrete pavement slabs, raised kerbs, white edge lines on main roads, sunburnt grass and red laterite soil
 - Lighting: about 4,500 orange sodium street lamps along the roads, lighting the road, pavement, walls, cars and people beneath them through a city-wide light map (light in the world, not glare on the screen); tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
 - Rotating minimap with street names, full-screen map with click-to-fast-travel
-- Drive anything: tuk-tuks are parked beside the spawn point and near most landmarks, and you can take any vehicle in traffic (car, van, bus, motorbike, bicycle, e-scooter). The driver climbs out and runs off; vehicles you leave stay where you left them. Each type has its own speed, acceleration, braking, turning circle and weight: a car does about 110 km/h, a bus is slow to start and wide in the turns, two-wheelers lean into corners, the bicycle has no engine noise, and you stand on the e-scooter. Taking vehicles is off near places of worship
-- Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only), motorbikes, bicycles and electric scooters. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
+- Drive anything: tuk-tuks are parked beside the spawn point and near most landmarks, and you can take any vehicle in traffic (saloon, hatchback, SUV, van, bus, metro bus, motorbike, bicycle, e-scooter). The driver climbs out and runs off; vehicles you leave stay where you left them. Each type has its own speed, acceleration, braking, turning circle and weight: a car does about 110 km/h, a bus is slow to start and wide in the turns, two-wheelers lean into corners, the bicycle has no engine noise, and you stand on the e-scooter. Taking vehicles is off near places of worship
+- Traffic on the real road network: tuk-tuks, saloons, Wagon R-style hatchbacks, SUVs, vans, red route buses and white-and-red metro buses (main roads only), motorbikes, bicycles and electric scooters, with riders on the two-wheelers. Vehicles are shaped from side profiles with rounded edges, wheel arches, separate windows, rims, bumpers, mirrors and number plates. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions, stops at red traffic lights and honks if you block it. Buses pull in at bus stops
+- Street furniture from OpenStreetMap: about 170 bus shelters (and signs where there's no room for one), canopies at bus stations, traffic lights at about 75 signalled junctions and crossings (green, amber, red cycles), and raised platforms with canopies, benches and name boards at the railway stations
 - Pedestrians on the pavements, with jointed bodies (knees, elbows, hips) and faces: office workers, men in sarongs, women in sarees, dresses or hijabs, Gen Z groups in hoodies and caps, tourists with sun hats, cameras and backpacks, older people walking slower with a stoop, and school children in white uniforms. Some carry umbrellas, phones or shopping bags. Families, tourist couples, friends and school kids walk together, and scatter together if one of them is hit. They walk, stop and stand by the road, cross side streets, step around you, and jump out of the way of your tuk-tuk. Traffic stops for them. Fewer people are out late at night
 - Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya, Kollupitiya and Bambalapitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
 - Fighting and crashes: punch with F or the left mouse button and people are knocked down, lie there, then get up and run off. Hit people with the tuk-tuk at speed and they go down too. Ramming traffic shares momentum by mass: a bicycle or scooter is thrown aside and falls over, a car is shoved and spun, a bus barely moves and stops you dead. Crashed vehicles slide to a halt and then rejoin traffic. None of this works within 120 m of the Red Mosque, Gangaramaya Temple or Seema Malaka (places of worship are exploration only)
@@ -48,10 +49,11 @@ The generated map file `public/data/city.json` is committed, so you don't need t
 npm run data
 ```
 
-This runs two steps:
+This runs three steps:
 
 1. `npm run data:fetch` downloads the map area (about 40 MB) from the OpenStreetMap Overpass API into `data/raw/` (ignored by git).
-2. `npm run data:build` converts it to local metres, generates filler buildings and trees, and writes `public/data/city.json`.
+2. `npm run data:extras` downloads the bus stops and traffic signals (small) into `data/raw/`.
+3. `npm run data:build` converts it to local metres, generates filler buildings and trees, and writes `public/data/city.json`.
 
 Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts).
 
@@ -106,7 +108,7 @@ public/data/city.json   generated map (about 9.6 MB)
 
 1 unit = 1 metre. Origin (0, 0, 0) is the Old Colombo Lighthouse clock tower on Chatham Street, Fort. +x is east, +z is south (north is -z).
 
-A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `seeColombo.setTime(hour)`, `seeColombo.player.pos`, `seeColombo.traffic.agents`, `seeColombo.peds.peds`, `seeColombo.trains.trains`.
+A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `seeColombo.setTime(hour)`, `seeColombo.player.pos`, `seeColombo.traffic.agents`, `seeColombo.peds.peds`, `seeColombo.trains.trains`, `seeColombo.furniture.stats`.
 
 ## Known limitations
 
@@ -119,7 +121,8 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - Only the coastal line runs. The Main Line and Kelani Valley Line tracks are drawn but have no trains.
 - Crashes are arcade physics: no damage, no injuries shown, and traffic vehicles don't crash into each other on their own. The no-fighting zone covers the places of worship in the landmark list (mosques, temples, churches and kovils); smaller ones elsewhere in the city are not covered yet.
 - Pedestrians are built from simple shapes in code (no downloaded models) and cross wherever their path takes them (no zebra crossings yet). They walk through trees and lamp posts.
-- No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
+- Traffic lights are placed from OSM signal nodes; junctions OSM doesn't tag have none. Pedestrians don't wait for the lights yet. Vehicles stuck in a gridlock for 7 seconds (not at a red light) pass through each other to clear it.
+- The metro bus copies the colours of the Lanka Metro Transit buses but not their logo.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
 - The character sits the same way in every vehicle (no separate pose for a car seat or handlebars), and there are no doors opening or exit animations.
 - On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.

@@ -1,8 +1,8 @@
 // Converts the raw Overpass download into public/data/city.json (local metres).
 // Also generates "filler" buildings along streets where OSM has no footprints, and scatters trees.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { BBOX, ORIGIN_FALLBACK, RAW_FILE, OUT_FILE, LANDMARKS } from './config.ts';
+import { BBOX, ORIGIN_FALLBACK, RAW_FILE, EXTRAS_FILE, OUT_FILE, LANDMARKS } from './config.ts';
 import { buildLandMask, isLand } from '../src/world/landmask.ts';
 import {
   ROAD_TYPES, AREA_KINDS, BUILDING_STYLES,
@@ -679,6 +679,23 @@ if (trains) {
   console.log(`Train routes: ${trains.routes.map((r) => `${(len(r) / 1000).toFixed(2)} km`).join(', ')}; stations: ${stations.map((s) => s.n).join(', ')}`);
 }
 
+// ---------- street furniture: bus stops, bus stations, traffic signals (scripts/fetch-extras.ts) ----------
+const busStops: number[] = [], signals: number[] = [];
+const busStations: { n: string; x: number; z: number }[] = [];
+if (existsSync(EXTRAS_FILE)) {
+  const seen = new Set<string>();
+  for (const e of JSON.parse(readFileSync(EXTRAS_FILE, 'utf8')).elements as OsmEl[]) {
+    if (e.type !== 'node' || e.lat == null) continue;
+    const t = e.tags ?? {};
+    const x = r1(projX(e.lon!)), z = r1(projZ(e.lat));
+    const k = `${Math.round(x / 3)},${Math.round(z / 3)}`;
+    if (t.highway === 'traffic_signals') signals.push(x, z);
+    else if (t.amenity === 'bus_station') busStations.push({ n: t.name ?? t['name:en'] ?? '', x, z });
+    else if (!seen.has(k)) { seen.add(k); busStops.push(x, z, t.shelter === 'no' ? 0 : 1); }
+  }
+} else console.warn(`No ${EXTRAS_FILE}: run npm run data:extras for bus stops and traffic lights`);
+console.log(`Bus stops: ${busStops.length / 3}, bus stations: ${busStations.length}, traffic signals: ${signals.length / 2}`);
+
 // ---------- write ----------
 const city: CityData = {
   version: 1,
@@ -693,6 +710,7 @@ const city: CityData = {
   places,
   landmarks,
   trains,
+  busStops, busStations, signals,
 };
 mkdirSync(dirname(OUT_FILE), { recursive: true });
 const json = JSON.stringify(city);

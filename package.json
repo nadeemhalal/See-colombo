@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "data:fetch": "tsx scripts/fetch-osm.ts",
+    "data:extras": "tsx scripts/fetch-extras.ts",
     "data:build": "tsx scripts/build-city.ts",
-    "data": "npm run data:fetch && npm run data:build"
+    "data": "npm run data:fetch && npm run data:extras && npm run data:build"
   },
   "dependencies": {
     "three": "^0.187.0"

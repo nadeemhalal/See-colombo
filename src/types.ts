@@ -97,4 +97,9 @@ export interface CityData {
   landmarks: Landmark[];
   /** coastal line train routes (southbound and northbound) and the stations on them */
   trains?: { routes: Flat[]; stations: { n: string; x: number; z: number }[] };
+  /** stride 3: x, z, has a shelter (1) or just a sign (0) */
+  busStops?: Flat;
+  busStations?: { n: string; x: number; z: number }[];
+  /** stride 2: x, z of each traffic signal node */
+  signals?: Flat;
 }

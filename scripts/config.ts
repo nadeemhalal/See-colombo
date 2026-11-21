@@ -9,6 +9,8 @@ export const BBOX = { south: 6.86, west: 79.82, north: 6.985, east: 79.893 };
 export const ORIGIN_FALLBACK = { lat: 6.93462, lon: 79.84307 };
 
 export const RAW_FILE = 'data/raw/colombo-city.osm.json';
+/** bus stops and traffic signals (scripts/fetch-extras.ts) */
+export const EXTRAS_FILE = 'data/raw/colombo-extras.osm.json';
 export const OUT_FILE = 'public/data/city.json';
 
 // Tier 1 landmarks (PRD 4.5 + a few Tier 2 that fall inside the Phase 1 area).

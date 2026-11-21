@@ -30,6 +30,9 @@ interface Handling {
 const HANDLING: Record<string, Handling> = {
   tuktuk: { wheelbase: 1.8, maxFwd: 16, maxRev: 3.5, accel: 3.6, brake: 9, half: 0.75, r: 0.66, seat: [0, -0.06, 0.3], engine: true },
   car: { wheelbase: 2.6, maxFwd: 30, maxRev: 6, accel: 4.8, brake: 11, half: 1.3, r: 0.9, seat: [-0.38, -0.42, 0.05], engine: true },
+  hatch: { wheelbase: 2.35, maxFwd: 27, maxRev: 6, accel: 4.6, brake: 11, half: 1.05, r: 0.78, seat: [-0.32, -0.36, 0.0], engine: true },
+  suv: { wheelbase: 2.85, maxFwd: 30, maxRev: 6, accel: 4.4, brake: 10.5, half: 1.5, r: 0.96, seat: [-0.4, -0.18, 0.1], engine: true },
+  metrobus: { wheelbase: 6.1, maxFwd: 20, maxRev: 3, accel: 2.0, brake: 7, half: 4.8, r: 1.28, seat: [-0.8, 0.05, 5.1], engine: true },
   van: { wheelbase: 2.9, maxFwd: 26, maxRev: 5, accel: 3.6, brake: 10, half: 1.45, r: 0.9, seat: [-0.42, -0.12, 1.25], engine: true },
   bus: { wheelbase: 6.2, maxFwd: 20, maxRev: 3, accel: 1.9, brake: 7, half: 4.25, r: 1.26, seat: [-0.75, 0.42, 4.55], engine: true },
   moto: { wheelbase: 1.3, maxFwd: 26, maxRev: 1.5, accel: 6.5, brake: 10, half: 0.55, r: 0.42, seat: [0, -0.04, -0.12], engine: true, leans: true },

@@ -264,7 +264,9 @@ Because this is a real city with real communities, these need care before anythi
 - Done: every vehicle type can be driven: take any car, van, bus, motorbike, bicycle or e-scooter from traffic with Enter. Per-type handling and weight; vehicles left behind stay parked (up to 8).
 - Done: punching and knockdowns, tuk-tuk hits on people, mass-based crashes with traffic. Disabled near places of worship (section 9).
 - Done: protagonist matched to the owner's reference sheet: their portrait projected onto the head (public/textures/player-face.jpg, faded to skin at the edges), curly hair, navy palm-print camp shirt (canvas texture), khaki cargos, white trainers and a watch, as the default outfit.
-- Not done yet: zebra crossings, traffic lights, motorbike and car driving, riding a bus, passengers visible on trains, Main Line and Kelani Valley trains.
+- Done: vehicle rebuild. Every vehicle (tuk-tuk, saloon, hatchback, SUV, van, route bus, metro bus, motorbike, bicycle, e-scooter, train) is built from extruded side profiles with rounded edges, wheel arches, glass, rims and lights; riders have jointed limbs. Only the white panels take the body colour. New types: hatchback, SUV and a Lanka Metro Transit-style city bus (colours only, no logo).
+- Done: bus stops and bus stations, traffic lights and station platforms from OSM (scripts/fetch-extras.ts for stops and signals). Traffic stops at red and amber; buses dwell at stops.
+- Not done yet: zebra crossings, pedestrians obeying lights, motorbike and car driving, riding a bus, passengers visible on trains, Main Line and Kelani Valley trains.
 - Simplification: vehicles stuck in a gridlock for 7 s pass through each other rather than reversing out.
 
 ## 12. Open questions

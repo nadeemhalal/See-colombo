@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoadGraph } from './roadGraph';
 import { VEHICLE_TYPES, vehicleMaterial, type VehicleType } from './models';
+import { Light, type StreetFurniture } from '../world/streetFurniture';
 
 export interface Circle { x: number; z: number; r: number }
 
@@ -18,6 +19,8 @@ export interface Agent {
   honkT: number;
   /** crash: shoved off its lane, sliding and spinning until it stops, then it rejoins traffic */
   crashT: number; cvx: number; cvz: number; spin: number; tilt: number;
+  /** seconds stood at a bus stop, and the last stop served */
+  dwell: number; served: number;
 }
 
 const COUNT = 140;
@@ -40,6 +43,8 @@ export class Traffic {
   private q = new THREE.Quaternion();
 
   private eul = new THREE.Euler();
+  /** traffic lights and bus stops (set by main once built) */
+  furniture: StreetFurniture | null = null;
   /** called when a car honks at the player (distance in metres) */
   onHonk: (dist: number) => void = () => {};
 
@@ -58,7 +63,7 @@ export class Traffic {
         c.setHex(t.colors[Math.floor(rand() * t.colors.length)]);
         mesh.setColorAt(i, c);
         const a: Agent = { type: ti, inst: i, edge: -1, s: 0, lane: 0, speed: 0, factor: 0.85 + rand() * 0.3,
-          x: 0, z: 0, heading: 0, stopT: 0, ghostT: 0, crashT: 0, cvx: 0, cvz: 0, spin: 0, tilt: 0, honkT: 0 };
+          x: 0, z: 0, heading: 0, stopT: 0, ghostT: 0, crashT: 0, cvx: 0, cvz: 0, spin: 0, tilt: 0, honkT: 0, dwell: 0, served: -1 };
         this.spawn(a, start, 20, SPAWN_MAX);
         this.agents.push(a);
       }
@@ -226,6 +231,31 @@ export class Traffic {
       const remain = e.len - a.s;
       if (remain < 10 && g.nodes[e.b].out.length > 2) want = Math.min(want, 4 + remain * 0.5);
 
+      // traffic lights: stop at the line on red, and on amber unless too close to stop
+      let atLight = false;
+      const fu = this.furniture;
+      const sl = fu?.stopLine(a.edge);
+      if (fu && sl) {
+        const lt = fu.light(sl);
+        const front = sl.s - a.s - t.len / 2;
+        if (lt !== Light.Green && front > -0.5 && !(lt === Light.Amber && front < a.speed * 1.1 + 0.5)) {
+          want = Math.min(want, Math.max(0, (front - 0.4) * 1.2));
+          atLight = front < 25;
+        }
+      }
+      // buses pull in at stops for a few seconds
+      const bs = (t.name === 'bus' || t.name === 'metrobus') ? fu?.busStop(a.edge) : undefined;
+      if (bs && bs.id !== a.served) {
+        const d = bs.s - a.s;
+        if (d > -1.5) {
+          want = Math.min(want, Math.max(0, d * 0.7));
+          if (d < 1.5 && a.speed < 0.5) {
+            a.dwell += dt;
+            if (a.dwell > 6) { a.served = bs.id; a.dwell = 0; }
+          }
+        } else a.served = bs.id;
+      }
+
       const hx = Math.sin(a.heading), hz = Math.cos(a.heading);
       const look = 6 + a.speed * 1.6;
       // gap to an obstacle ahead in our lane; latR = its half width, lonR = its half length
@@ -266,7 +296,7 @@ export class Traffic {
       a.ghostT -= dt;
       if (a.speed < 0.3 && want < 0.3) {
         a.stopT += dt;
-        if (a.stopT > 7 && playerGap === Infinity) { a.ghostT = 3; a.stopT = 0; }
+        if (a.stopT > 7 && playerGap === Infinity && !atLight) { a.ghostT = 3; a.stopT = 0; }
       } else a.stopT = 0;
 
       a.honkT -= dt;

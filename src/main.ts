@@ -15,6 +15,7 @@ import { Planes } from './world/planes';
 import { Post } from './world/post';
 import { detectQuality, applyQuality, saveQuality } from './world/quality';
 import { setVehicleNight, VEHICLE_TYPES } from './traffic/models';
+import { StreetFurniture } from './world/streetFurniture';
 import { Input } from './player/input';
 import { Character } from './player/character';
 import { PlayerController } from './player/controller';
@@ -131,6 +132,9 @@ async function main() {
   scene.add(peds.group);
   const trains = new Trains(city);
   scene.add(trains.group);
+  const furniture = new StreetFurniture(city, graph, collision);
+  scene.add(furniture.group);
+  traffic.furniture = furniture;
   const sound = new Sound();
 
   const TUK_COLORS = [0xb3201e, 0x1f7a3a, 0x1b4f9c, 0xe0b400, 0x5a1a1a, 0x1c1c1c];
@@ -488,6 +492,7 @@ async function main() {
     // the vehicle you're in is solid to traffic and people along its whole length (a bus is 11 m)
     const mine = driving ? driving.circles() : [];
     const myR = driving ? Math.min(driving.reach, 1.6) : 0.45;
+    furniture.update(dt, env.night);
     traffic.update(dt, driving ? driving.pos : player.pos, myR, camFwd, others.concat(people, mine));
     peds.update(dt, driving ? driving.pos : player.pos, myR, camFwd, driving && { x: driving.pos.x, z: driving.pos.z, heading: driving.heading, speed: driving.speed }, streetDensity(minutes / 60), others.slice(0, trainCount).concat(mine));
     // the trains watch for the player and cars on the line
@@ -537,7 +542,7 @@ async function main() {
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, takeFromTraffic, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, furniture, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, takeFromTraffic, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {
