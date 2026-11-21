@@ -14,6 +14,7 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Five outfits (O to switch, remembered in the browser): palm shirt and cargos (default), office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
 - Over-the-shoulder camera that pulls in when a wall is in the way
 - Real sun position for Colombo, a full day every 10 real minutes (T for 10x faster), lit windows and shop signboards at night
+- Colombo street fronts: low commercial blocks are split into narrow shophouse plots facing the street, each with its own paint colour, a false-front parapet of its own height and often a corrugated sheet or tarp awning over the pavement (deep ones on thin posts). Apartment blocks get balconies with solid or steel-railing fronts on their street sides. Colonial buildings in Fort and Pettah get a columned verandah with a balustrade along the pavement. Buildings over 40 m are modern towers with curtain walls or ribbon windows and a plant-room crown. Flat roofs carry the stairwell head-room box, and split AC units hang under some windows
 - Sri Lankan street look: faded pastel and colonial plaster walls with weather stains, clay tile hip roofs on houses and low buildings, roof parapets, floor ledges, blue and black rooftop water tanks, green shutters on colonial buildings, painted shop signboards and window grilles
 - Ground detail: patched asphalt, concrete pavement slabs, raised kerbs, white edge lines on main roads, sunburnt grass and red laterite soil
 - Lighting: about 4,500 orange sodium street lamps along the roads, lighting the road, pavement, walls, cars and people beneath them through a city-wide light map (light in the world, not glare on the screen); tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
@@ -122,7 +123,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - The character sits the same way in every vehicle (no separate pose for a car seat or handlebars), and there are no doors opening or exit animations.
 - On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
 - Lamp light is painted at about 2.5 m per pixel, so pools are soft rather than sharp-edged.
-- Buildings are still extruded footprints with shader detail. There are no balconies, verandah pillars or modelled shopfronts yet.
+- Buildings are still built from OSM footprints, so a whole block mapped as one footprint is split into shop plots only along its street side. Awnings, verandah columns and balconies are visual only (you walk through the posts). Building shapes come from OSM alone; better footprints and heights (Overture, Google Open Buildings) would need a data download.
 - Only Phase 1 of the map. Areas south of Kollupitiya and east of Town Hall are not included yet.
 
 ## Deployment
