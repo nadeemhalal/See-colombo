@@ -4,7 +4,11 @@ import type { Building, CityData, Flat } from '../types';
 import { BUILDING_STYLES, ROAD_TYPES } from '../types';
 import { MeshBuilder, chunkedInstances } from './geom';
 
-const CHUNK = 400;
+// Buildings are built in 250 m chunks, in full detail only near the player (streamed in and out as you
+// move), with a cheap box per building standing in for everything further away.
+const CHUNK = 250;
+const DETAIL_IN = 520; // build full detail for chunks closer than this (m, to the chunk edge)
+const DETAIL_OUT = 760; // and drop it again beyond this
 
 // Colombo street colours: whitewash and cream, sun-faded pastels, ochre, terracotta, mint and
 // sky blue; colonial buildings in buff, cream and red brick.
@@ -51,21 +55,21 @@ export interface BuildingMeshes {
   material: THREE.MeshStandardMaterial;
   /** 0 = day, 1 = night (window lights) */
   setNight(v: number): void;
+  /** stream detail in and out around (x,z); builds at most `budget` chunks this call */
+  update(x: number, z: number, budget?: number): void;
+  /** how many chunks are built in full detail */
+  readonly detailChunks: number;
 }
 
 export function buildBuildings(city: CityData): BuildingMeshes {
-  const chunks = new Map<string, MeshBuilder>();
-  const getMb = (x: number, z: number) => {
-    const k = `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
-    let mb = chunks.get(k);
-    if (!mb) chunks.set(k, (mb = new MeshBuilder(true, { aWall: 3, aSeed: 2 })));
-    return mb;
-  };
+  // the chunk being built right now (addBuilding writes into it)
+  let curMb: MeshBuilder | null = null;
+  const getMb = (_x: number, _z: number) => curMb!;
 
   const wallCol = new THREE.Color();
   const roofCol = new THREE.Color();
   const ledgeCol = new THREE.Color();
-  const tanks: { x: number; y: number; z: number; blue: boolean; s: number }[] = [];
+  let tanks: { x: number; y: number; z: number; blue: boolean; s: number }[] = [];
 
   // road centre lines on a coarse grid, to find which walls face a street and how much pavement is in front
   const RC = 30;
@@ -101,7 +105,19 @@ export function buildBuildings(city: CityData): BuildingMeshes {
     return 0;
   };
 
-  city.buildings.forEach((b, i) => addBuilding(b, i));
+  // which buildings belong to which chunk (by centroid)
+  interface Chunk { key: string; cx: number; cz: number; ids: number[]; detail: THREE.Object3D[] | null; lod: THREE.InstancedMesh | null }
+  const chunkMap = new Map<string, Chunk>();
+  city.buildings.forEach((b, i) => {
+    const n = b.p.length / 2;
+    let x = 0, z = 0;
+    for (let k = 0; k < n; k++) { x += b.p[k * 2]; z += b.p[k * 2 + 1]; }
+    x /= n; z /= n;
+    const gx = Math.floor(x / CHUNK), gz = Math.floor(z / CHUNK), key = `${gx},${gz}`;
+    let c = chunkMap.get(key);
+    if (!c) chunkMap.set(key, (c = { key, cx: (gx + 0.5) * CHUNK, cz: (gz + 0.5) * CHUNK, ids: [], detail: null, lod: null }));
+    c.ids.push(i);
+  });
 
   function addBuilding(b: Building, i: number) {
     const style = BUILDING_STYLES[b.s];
@@ -632,25 +648,131 @@ export function buildBuildings(city: CityData): BuildingMeshes {
 
   const group = new THREE.Group();
   group.name = 'buildings';
-  for (const mb of chunks.values()) {
-    const m = new THREE.Mesh(mb.build(), material);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    group.add(m);
-  }
 
   // rooftop water tanks: black or blue plastic on a little stand
-  if (tanks.length) {
-    const tankGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.15, 8).translate(0, 1.0, 0);
-    const standGeo = new THREE.BoxGeometry(1.4, 0.42, 1.4).translate(0, 0.21, 0);
-    const tankMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
-    const standMat = new THREE.MeshStandardMaterial({ color: 0x8c8880, roughness: 0.9 });
-    const place = (t: (typeof tanks)[number], m4: THREE.Matrix4) => m4.makeScale(t.s, t.s, t.s).setPosition(t.x, t.y, t.z);
-    const meshes = [
-      ...chunkedInstances(tanks, tankGeo, tankMat, CHUNK, place, (t, c) => c.setHex(t.blue ? 0x2f6fb0 : 0x1d1f22)),
-      ...chunkedInstances(tanks, standGeo, standMat, CHUNK, place),
-    ];
-    for (const m of meshes) { m.castShadow = true; m.receiveShadow = true; group.add(m); }
+  const tankGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.15, 8).translate(0, 1.0, 0);
+  const standGeo = new THREE.BoxGeometry(1.4, 0.42, 1.4).translate(0, 0.21, 0);
+  const tankMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x8c8880, roughness: 0.9 });
+  const placeTank = (t: (typeof tanks)[number], m4: THREE.Matrix4) => m4.makeScale(t.s, t.s, t.s).setPosition(t.x, t.y, t.z);
+
+  // ---- far stand-ins: one box per building, coloured like it, with a window pattern
+  const lodMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  lodMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = uNight;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vLod; varying vec3 vLodN;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vLod = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        vLodN = normalize(mat3(modelMatrix * instanceMatrix) * objectNormal);`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uNight; varying vec3 vLod; varying vec3 vLodN;
+        float lh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float lodWin;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        lodWin = 0.0;
+        if (abs(vLodN.y) < 0.5) {
+          float u = abs(vLodN.x) > abs(vLodN.z) ? vLod.z : vLod.x;
+          vec2 cell = vec2(u / 3.0, vLod.y / 3.4);
+          vec2 f = fract(cell);
+          lodWin = step(0.2, f.x) * step(f.x, 0.8) * step(0.3, f.y) * step(f.y, 0.82) * step(1.0, cell.y);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.2, 0.24), lodWin * 0.85);
+          diffuseColor.rgb *= mix(0.78, 1.0, smoothstep(0.0, 3.0, vLod.y));
+        } else diffuseColor.rgb *= 0.62;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += lodWin * step(0.66, lh(floor(vec2((abs(vLodN.x) > abs(vLodN.z) ? vLod.z : vLod.x) / 3.0, vLod.y / 3.4)) + floor(vLod.xz / 50.0))) * vec3(1.0, 0.75, 0.45) * 0.55 * uNight;`);
+  };
+  lodMat.customProgramCacheKey = () => 'bld-lod';
+  const lodGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  const lodCol = new THREE.Color();
+  for (const c of chunkMap.values()) {
+    const mesh = new THREE.InstancedMesh(lodGeo, lodMat, c.ids.length);
+    c.ids.forEach((bi, n) => {
+      const b = city.buildings[bi];
+      const np = b.p.length / 2;
+      // oriented to the longest wall, sized to the footprint's extent along and across it
+      let best = 0, dx = 1, dz = 0;
+      for (let k = 0; k < np; k++) {
+        const j = (k + 1) % np, ex = b.p[j * 2] - b.p[k * 2], ez = b.p[j * 2 + 1] - b.p[k * 2 + 1], L = Math.hypot(ex, ez);
+        if (L > best) { best = L; dx = ex / L; dz = ez / L; }
+      }
+      let a0 = Infinity, a1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+      for (let k = 0; k < np; k++) {
+        const x = b.p[k * 2], z = b.p[k * 2 + 1], a = x * dx + z * dz, cc = -x * dz + z * dx;
+        a0 = Math.min(a0, a); a1 = Math.max(a1, a); c0 = Math.min(c0, cc); c1 = Math.max(c1, cc);
+      }
+      const am = (a0 + a1) / 2, cm = (c0 + c1) / 2;
+      // shrink a little: a footprint's bounding box is bigger than the building
+      const w = (a1 - a0) * 0.92, d = (c1 - c0) * 0.92;
+      q.setFromAxisAngle(up, Math.atan2(dx, dz) - Math.PI / 2);
+      m4.compose(new THREE.Vector3(am * dx - cm * dz, 0, am * dz + cm * dx), q, new THREE.Vector3(w, b.h, d));
+      mesh.setMatrixAt(n, m4);
+      const style = BUILDING_STYLES[b.s];
+      const r0 = hash(bi + 0.13), r1 = hash(bi + 7.7);
+      const pastel = (style === 'plain' && r0 < 0.42) || (style === 'house' && r0 < 0.3);
+      const pal = pastel ? PALETTES.pastel : PALETTES[b.h >= 40 && style !== 'colonial' ? 'glass' : style];
+      lodCol.setHex(pal[Math.floor(r1 * pal.length)]);
+      mesh.setColorAt(n, lodCol);
+    });
+    mesh.computeBoundingSphere();
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    c.lod = mesh;
+    group.add(mesh);
   }
-  return { group, material, setNight: (v) => (uNight.value = v) };
+
+  // ---- full detail, built on demand
+  const buildChunk = (c: Chunk) => {
+    curMb = new MeshBuilder(true, { aWall: 3, aSeed: 2 });
+    tanks = [];
+    for (const i of c.ids) addBuilding(city.buildings[i], i);
+    const objs: THREE.Object3D[] = [];
+    if (curMb.count) {
+      const m = new THREE.Mesh(curMb.build(), material);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      objs.push(m);
+    }
+    if (tanks.length) {
+      for (const m of [
+        ...chunkedInstances(tanks, tankGeo, tankMat, 1e6, placeTank, (t, col) => col.setHex(t.blue ? 0x2f6fb0 : 0x1d1f22)),
+        ...chunkedInstances(tanks, standGeo, standMat, 1e6, placeTank),
+      ]) { m.castShadow = true; m.receiveShadow = true; objs.push(m); }
+    }
+    curMb = null;
+    for (const o of objs) group.add(o);
+    c.detail = objs;
+    if (c.lod) c.lod.visible = false;
+  };
+  const dropChunk = (c: Chunk) => {
+    for (const o of c.detail ?? []) {
+      group.remove(o);
+      if (o instanceof THREE.InstancedMesh) o.dispose();
+      else if (o instanceof THREE.Mesh) o.geometry.dispose();
+    }
+    c.detail = null;
+    if (c.lod) c.lod.visible = true;
+  };
+  let detailChunks = 0;
+  const chunks = [...chunkMap.values()];
+  const edgeDist = (c: Chunk, x: number, z: number) =>
+    Math.hypot(Math.max(0, Math.abs(x - c.cx) - CHUNK / 2), Math.max(0, Math.abs(z - c.cz) - CHUNK / 2));
+  const update = (x: number, z: number, budget = 1) => {
+    const want: { c: Chunk; d: number }[] = [];
+    for (const c of chunks) {
+      const d = edgeDist(c, x, z);
+      if (c.detail && d > DETAIL_OUT) { dropChunk(c); detailChunks--; }
+      else if (!c.detail && d < DETAIL_IN) want.push({ c, d });
+    }
+    want.sort((a, b) => a.d - b.d);
+    for (let k = 0; k < Math.min(budget, want.length); k++) { buildChunk(want[k].c); detailChunks++; }
+  };
+  return {
+    group, material, update,
+    setNight: (v) => (uNight.value = v),
+    get detailChunks() { return detailChunks; },
+  };
 }

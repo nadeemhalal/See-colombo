@@ -1,5 +1,5 @@
-// Downloads the Phase 1 area from OpenStreetMap via the Overpass API.
-// Data © OpenStreetMap contributors, ODbL. Output: data/raw/colombo-phase1.osm.json
+// Downloads the map area (see config.ts) from OpenStreetMap via the Overpass API.
+// Data © OpenStreetMap contributors, ODbL. Output: RAW_FILE in config.ts
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { BBOX, RAW_FILE } from './config.ts';
@@ -8,7 +8,7 @@ const ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.
 
 const b = `${BBOX.south},${BBOX.west},${BBOX.north},${BBOX.east}`;
 const query = `
-[out:json][timeout:240];
+[out:json][timeout:600][maxsize:536870912];
 (
   way["building"](${b});
   relation["building"](${b});
@@ -31,7 +31,7 @@ const query = `
   nwr["amenity"~"^(place_of_worship|townhall)$"](${b});
   nwr["man_made"~"^(lighthouse|tower)$"](${b});
   nwr["railway"="station"](${b});
-  nwr["name"~"Lotus Tower|Galle Face|Altair|Seema Malaka|Beira Lake|Presidential Secretariat",i](${b});
+  nwr["name"~"Lotus Tower|Galle Face|Altair|Seema Malaka|Beira Lake|Presidential Secretariat|Independence|Arcade|Racecourse|Race Course|Nelum Pokuna|Premadasa|Sugathadasa|Majestic City|Liberty Plaza|Port City|Cinnamon Life|Floating Market|Kelani|Sambodhi|Kayman|Dewatagaha|Kathiresan|Ponnambala|Wolvendaal|Lucia|Anthony|University of Colombo|BMICH|Bandaranaike Memorial",i](${b});
 );
 out geom;
 `;

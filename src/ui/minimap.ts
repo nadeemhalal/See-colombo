@@ -27,21 +27,23 @@ export class Minimap {
     ctx.fillStyle = '#80b0c8';
     ctx.fillRect(0, 0, S, S);
 
+    // keep the same metres-per-pixel on screen whatever resolution the map was drawn at
+    const zm = (this.zoom * MAP_MPP) / 2;
     const mx = (px - minX) / MAP_MPP, mz = (pz - minZ) / MAP_MPP;
     ctx.translate(R, R);
     ctx.rotate(camYaw);
-    ctx.scale(this.zoom, this.zoom);
+    ctx.scale(zm, zm);
     ctx.drawImage(this.map, -mx, -mz);
 
     // landmarks
     for (const l of this.city.landmarks) {
       const x = (l.x - px) / MAP_MPP, z = (l.z - pz) / MAP_MPP;
-      if (Math.hypot(x, z) * this.zoom > R) continue;
+      if (Math.hypot(x, z) * zm > R) continue;
       ctx.beginPath();
-      ctx.arc(x, z, 4.5 / this.zoom, 0, Math.PI * 2);
+      ctx.arc(x, z, 4.5 / zm, 0, Math.PI * 2);
       ctx.fillStyle = this.visited.has(l.id) ? '#3a9d5d' : '#d9534f';
       ctx.fill();
-      ctx.lineWidth = 1.5 / this.zoom;
+      ctx.lineWidth = 1.5 / zm;
       ctx.strokeStyle = '#fff';
       ctx.stroke();
     }
@@ -54,7 +56,7 @@ export class Minimap {
     ctx.textBaseline = 'middle';
     const cos = Math.cos(camYaw), sin = Math.sin(camYaw);
     for (const lb of this.labels) {
-      const dx = ((lb.x - px) / MAP_MPP) * this.zoom, dz = ((lb.z - pz) / MAP_MPP) * this.zoom;
+      const dx = ((lb.x - px) / MAP_MPP) * zm, dz = ((lb.z - pz) / MAP_MPP) * zm;
       const sx = dx * cos - dz * sin, sy = dx * sin + dz * cos;
       if (Math.hypot(sx, sy) > R - 18) continue;
       let a = lb.a + camYaw;

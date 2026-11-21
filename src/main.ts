@@ -6,6 +6,7 @@ import { Collision } from './world/collision';
 import { buildGround, buildSurfaces } from './world/ground';
 import { buildWater } from './world/water';
 import { buildBuildings } from './world/buildings';
+import { cullByDistance } from './world/geom';
 import { buildTrees } from './world/trees';
 import { buildLandmarks } from './world/landmarks';
 import { Environment } from './world/environment';
@@ -78,7 +79,8 @@ async function main() {
 
   setLoading(`Planting ${(city.trees.length / 4).toLocaleString()} trees…`);
   await nextFrame();
-  scene.add(buildTrees(city, collision));
+  const trees = buildTrees(city, collision);
+  scene.add(trees);
   const landmarks = buildLandmarks(city, collision);
   scene.add(landmarks.group);
   const lamps = new StreetLights(city, mask, collision);
@@ -247,6 +249,8 @@ async function main() {
   };
 
   spawnAt();
+  // full-detail buildings around the start point before the first frame
+  buildings.update(player.pos.x, player.pos.z, 99);
 
   const travel = (x: number, z: number) => {
     if (!isLand(mask, x, z)) return;
@@ -254,6 +258,7 @@ async function main() {
     leaveTrain();
     player.teleport(x, z, 0);
     collision.resolve(player.pos, 0.4, 0);
+    buildings.update(x, z, 99);
     bigmap.hide();
     input.free = input.wantLock = true;
     input.lock();
@@ -309,7 +314,7 @@ async function main() {
   let punchQueued = false;
   canvas.addEventListener('mousedown', (e) => { if (e.button === 0 && started && !paused) punchQueued = true; });
   // places of worship are exploration only (PRD section 9): no fighting in or around them
-  const worship = ['redmosque', 'gangaramaya', 'seemamalaka']
+  const worship = ['redmosque', 'gangaramaya', 'seemamalaka', 'wolvendaal', 'stanthonys', 'stlucias', 'ponnambalavaneswaram', 'kathiresan', 'dewatagaha', 'sambodhi']
     .map((id) => city.landmarks.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => !!l);
   const nearWorship = (x: number, z: number) => worship.some((l) => Math.hypot(l.x - x, l.z - z) < 120);
   let punchCd = 0;
@@ -486,6 +491,11 @@ async function main() {
 
     env.update(minutes, dayOfYear, player.pos, camera.position);
     buildings.setNight(env.night);
+    // stream building detail around you (more per frame when you're moving fast), cull far trees and lamps
+    const focus = driving ? driving.pos : player.pos;
+    buildings.update(focus.x, focus.z, driving && Math.abs(driving.speed) > 15 ? 2 : 1);
+    cullByDistance(trees, focus.x, focus.z, 650);
+    cullByDistance(lamps.group, focus.x, focus.z, 700);
     lamps.update(dt, env.night, player.pos);
     planes.update(dt, player.pos, env.night);
     setVehicleNight(THREE.MathUtils.smoothstep(env.night, 0.3, 0.8));

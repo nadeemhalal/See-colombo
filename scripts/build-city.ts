@@ -512,8 +512,12 @@ for (const def of LANDMARKS) {
   for (const e of raw) {
     if (!names(e.tags).some((n) => def.match.test(n))) continue;
     if (e.tags?.highway) continue;
+    // ignore namesakes far from where the landmark should be (there are many St. Anthony's churches)
+    const c = centroidLL(e);
+    const km = c ? Math.hypot((c.lat - def.lat) * 110.6, (c.lon - def.lon) * 110.4) : 0;
+    if (km > 1.5) continue;
     const t = e.tags!;
-    const score = (t.building ? 3 : 0) + (t.tourism || t.historic || t.amenity || t.man_made || t.leisure || t.natural ? 2 : 0) + (e.type !== 'node' ? 1 : 0);
+    const score = (t.building ? 3 : 0) + (t.tourism || t.historic || t.amenity || t.man_made || t.leisure || t.natural ? 2 : 0) + (e.type !== 'node' ? 1 : 0) - km;
     if (!best || score > best.score) best = { e, score };
   }
   let ll: LatLon | null = def.id === 'lotus' ? lotusLL : null;

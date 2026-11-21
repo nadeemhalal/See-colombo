@@ -166,3 +166,12 @@ export function chunkedInstances<T extends { x: number; z: number }>(
   }
   return out;
 }
+
+/** Hide the chunk meshes in a group whose bounding sphere lies further than `radius` from (x,z). */
+export function cullByDistance(group: THREE.Object3D, x: number, z: number, radius: number) {
+  for (const m of group.children) {
+    const s = (m as THREE.InstancedMesh).boundingSphere ?? (m as THREE.Mesh).geometry?.boundingSphere;
+    if (!s) continue;
+    m.visible = Math.hypot(s.center.x - x, s.center.z - z) - s.radius < radius;
+  }
+}

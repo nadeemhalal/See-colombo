@@ -105,7 +105,7 @@ Tier 2 (later): Independence Memorial Hall, Town Hall, Viharamahadevi Park, Nati
 |---|---|---|
 | v0.1 | Fort, Pettah, Galle Face, Slave Island, Beira Lake, north Kollupitiya | about 5 km² |
 | v0.3 | + Kollupitiya, Bambalapitiya, Cinnamon Gardens, Borella | about 15 km² |
-| v1.0 | Whole Colombo Municipal Council area (Colombo 1–15) | about 37 km² |
+| v1.0 | Whole Colombo Municipal Council area (Colombo 1–15) | about 37 km². Done early, 21 Nov 2026 |
 | Later | Dehiwala-Mount Lavinia, Rajagiriya, Kotte | |
 
 ## 5. Gameplay features
@@ -247,6 +247,7 @@ Because this is a real city with real communities, these need care before anythi
 - Phase 1 area is about 5.3 × 4.5 km, larger than the 5 km² planned, to include Beira Lake, Town Hall and Viharamahadevi Park.
 
 ### 10.2 v0.2 progress (20 Nov 2026)
+- Done: whole CMC map (Colombo 1–15, 88,000 buildings) with distance-streamed building detail, 40 landmarks including the Tier 2 list, map image scaled to the larger area.
 - Done: drivable tuk-tuk (get in/out, arcade handling, horn, collision with buildings, trees, sea and other vehicles); parked tuk-tuks at the spawn point and near landmarks.
 - Done: traffic on a directed road graph built from OSM, with left-hand driving, one-way streets, car-following, junction slowing and honking. About 110 vehicles kept within roughly 300 m of the player. Buses only use primary and trunk roads.
 - Done: synthesised engine, horn and impact sounds (WebAudio, no audio files).

@@ -1,12 +1,14 @@
-// Phase 1 map area: Fort, Pettah, Galle Face, Slave Island, Beira Lake, Kollupitiya, Town Hall area.
+// Map area: the whole Colombo Municipal Council area, Colombo 1 to 15. Mattakkuliya and the Kelani
+// river mouth in the north, Wellawatte canal in the south, Kirulapone, Narahenpita and the Kolonnawa
+// canal in the east, plus the port and Port City to the west.
 // The west edge must be open sea: the land mask is filled by scanning from the west edge.
-export const BBOX = { south: 6.905, west: 79.82, north: 6.946, east: 79.868 };
+export const BBOX = { south: 6.86, west: 79.82, north: 6.985, east: 79.893 };
 
 // Game origin (0,0,0). Old Colombo Lighthouse clock tower, Chatham Street, Fort.
 // Replaced by the OSM position of the clock tower when it is found in the data.
 export const ORIGIN_FALLBACK = { lat: 6.93462, lon: 79.84307 };
 
-export const RAW_FILE = 'data/raw/colombo-phase1.osm.json';
+export const RAW_FILE = 'data/raw/colombo-city.osm.json';
 export const OUT_FILE = 'public/data/city.json';
 
 // Tier 1 landmarks (PRD 4.5 + a few Tier 2 that fall inside the Phase 1 area).
@@ -53,6 +55,52 @@ export const LANDMARKS: LandmarkDef[] = [
     info: "Colombo's largest park, formerly Victoria Park." },
   { id: 'museum', name: 'National Museum of Colombo', match: /national museum/i, lat: 6.9100, lon: 79.8610,
     info: "Sri Lanka's largest museum, founded in 1877." },
+  { id: 'independencehall', name: 'Independence Memorial Hall', match: /independence (memorial )?hall/i, lat: 6.9040, lon: 79.8676,
+    info: 'Built for the ceremonial opening of Parliament after independence in 1948, modelled on a Kandyan royal audience hall.' },
+  { id: 'arcade', name: 'Arcade Independence Square', match: /arcade independence/i, lat: 6.9032, lon: 79.8687,
+    info: 'Restored colonial buildings, once a lunatic asylum and auditors\' offices, now shops and cafes.' },
+  { id: 'wolvendaal', name: 'Wolvendaal Church', match: /wolvendaal/i, lat: 6.9418, lon: 79.8590,
+    info: 'Dutch Reformed church completed in 1757, one of the oldest Protestant churches in the country.' },
+  { id: 'stanthonys', name: "St. Anthony's Shrine, Kochchikade", match: /st\.? ?anthony'?s (shrine|church)/i, lat: 6.9466, lon: 79.8565,
+    info: 'Catholic shrine visited by people of every faith. Rebuilt after the 2019 Easter Sunday attack.' },
+  { id: 'stlucias', name: "St. Lucia's Cathedral", match: /st\.? ?lucia('?s)? (cathedral|church)/i, lat: 6.9481, lon: 79.8645,
+    info: 'The largest church in Sri Lanka, in Kotahena, completed in 1906.' },
+  { id: 'ponnambalavaneswaram', name: 'Sri Ponnambalavaneswaram Kovil', match: /ponnambala/i, lat: 6.9476, lon: 79.8637,
+    info: 'Hindu temple in Kotahena built in granite in the early 1900s.' },
+  { id: 'kathiresan', name: 'New Kathiresan Kovil', match: /new kathiresan|kathiresan kovil/i, lat: 6.8925, lon: 79.8560,
+    info: 'Hindu temple on Galle Road, Bambalapitiya, starting point of the Vel festival procession.' },
+  { id: 'dewatagaha', name: 'Dewatagaha Mosque', match: /dewatagaha/i, lat: 6.9160, lon: 79.8612,
+    info: 'Mosque and shrine opposite Town Hall, more than a century old.' },
+  { id: 'sambodhi', name: 'Sambodhi Chaithya', match: /sambodhi/i, lat: 6.9424, lon: 79.8457,
+    info: 'Stupa raised on arches above the road near the port, built in 1956.' },
+  { id: 'kaymansgate', name: "Kayman's Gate", match: /kayman/i, lat: 6.9384, lon: 79.8555,
+    info: 'A Dutch-era belfry in Pettah that marked the old gate to the fort.' },
+  { id: 'dutchmuseum', name: 'Dutch Period Museum', match: /dutch (period |colonial )?museum/i, lat: 6.9375, lon: 79.8510,
+    info: 'A 17th-century Dutch townhouse on Prince Street, Pettah.' },
+  { id: 'floatingmarket', name: 'Pettah Floating Market', match: /floating market/i, lat: 6.9330, lon: 79.8545,
+    info: 'Market stalls on walkways over Beira Lake beside the bus stand.' },
+  { id: 'cinnamonlife', name: 'Cinnamon Life', match: /cinnamon life/i, lat: 6.9285, lon: 79.8478,
+    info: 'Hotel, homes and shops on the lakefront in Slave Island, opened in 2024.' },
+  { id: 'portcity', name: 'Port City Colombo', match: /(?!)/ /* no single OSM feature: centre of the reclaimed land */, lat: 6.9385, lon: 79.8335,
+    info: 'New land reclaimed from the sea west of Fort and Galle Face.' },
+  { id: 'premadasa', name: 'R. Premadasa Stadium', match: /premadasa (international )?(cricket )?stadium|khettarama/i, lat: 6.9395, lon: 79.8722,
+    info: 'International cricket ground in Maligawatte, seating about 35,000.' },
+  { id: 'sugathadasa', name: 'Sugathadasa Stadium', match: /sugathadasa/i, lat: 6.9556, lon: 79.8700,
+    info: 'Athletics stadium near the Kelani river, built for the 1991 South Asian Games.' },
+  { id: 'racecourse', name: 'Colombo Racecourse', match: /race ?course/i, lat: 6.9066, lon: 79.8613,
+    info: 'Former horse racing track from the 1890s, now a rugby ground and shopping arcade.' },
+  { id: 'nelumpokuna', name: 'Nelum Pokuna Theatre', match: /nelum pokuna/i, lat: 6.9110, lon: 79.8635,
+    info: 'Performing arts theatre shaped like a lotus pond, opened in 2011.' },
+  { id: 'bmich', name: 'BMICH', match: /bandaranaike memorial international|bmich/i, lat: 6.9020, lon: 79.8725,
+    info: 'Bandaranaike Memorial International Conference Hall, opened in 1973.' },
+  { id: 'unicolombo', name: 'University of Colombo', match: /^university of colombo$/i, lat: 6.9020, lon: 79.8605,
+    info: 'The oldest university in Sri Lanka, in Cinnamon Gardens.' },
+  { id: 'libertyplaza', name: 'Liberty Plaza', match: /liberty plaza/i, lat: 6.9115, lon: 79.8512,
+    info: 'One of the first shopping malls in Colombo, in Kollupitiya.' },
+  { id: 'majesticcity', name: 'Majestic City', match: /majestic city/i, lat: 6.8937, lon: 79.8553,
+    info: 'Shopping mall on Galle Road, Bambalapitiya, opened in the 1980s.' },
+  { id: 'kelanibridge', name: 'Kelani Bridge', match: /kelani.*bridge|kelaniya bridge/i, lat: 6.9585, lon: 79.8795,
+    info: 'Road bridges over the Kelani river at the north edge of the city.' },
   { id: 'beiralake', name: 'Beira Lake', match: /(?!)/ /* lake centroid is misleading; use fallback */, lat: 6.9230, lon: 79.8530,
     info: 'Lake at the heart of the city, dating back to the Portuguese period.' },
 ];

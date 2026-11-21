@@ -2,13 +2,15 @@ import type { CityData, Flat } from '../types';
 import { ROAD_TYPES, AREA_KINDS } from '../types';
 import type { LandMask } from '../world/landmask';
 
-export const MAP_MPP = 2; // metres per pixel of the pre-rendered map
+/** metres per pixel of the pre-rendered map: 2, or coarser for a big map so the canvas stays under ~13 Mpx */
+export let MAP_MPP = 2;
 
 export interface RoadLabel { x: number; z: number; a: number; n: string; major: boolean }
 
 /** Pre-renders the whole city to one canvas, used by both the minimap and the full map. */
 export function renderCityMap(city: CityData, mask: LandMask) {
   const { minX, minZ, maxX, maxZ } = city.bounds;
+  MAP_MPP = Math.max(2, Math.sqrt(((maxX - minX) * (maxZ - minZ)) / 13e6));
   const W = Math.ceil((maxX - minX) / MAP_MPP), H = Math.ceil((maxZ - minZ) / MAP_MPP);
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -57,10 +59,13 @@ export function renderCityMap(city: CityData, mask: LandMask) {
   ctx.fillStyle = '#c9c1b3';
   ctx.strokeStyle = '#b3aa9a';
   ctx.lineWidth = 0.6;
-  ctx.beginPath();
-  city.buildings.forEach((b) => path(b.p, true));
-  ctx.fill();
-  ctx.stroke();
+  // in batches: one path with tens of thousands of outlines is extremely slow to fill and stroke
+  for (let i = 0; i < city.buildings.length; i += 400) {
+    ctx.beginPath();
+    for (let k = i; k < Math.min(i + 400, city.buildings.length); k++) path(city.buildings[k].p, true);
+    ctx.fill();
+    ctx.stroke();
+  }
 
   // rails
   ctx.strokeStyle = '#8a8580';

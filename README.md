@@ -2,7 +2,7 @@
 
 A third-person, open-world walking simulator set in Colombo, Sri Lanka, built from real map data. See [PRD.md](PRD.md) for the full product plan.
 
-**Status: v0.2 "Ride" (tuk-tuk, traffic, pedestrians and the coastal line train).** Phase 1 map: Fort, Pettah, Galle Face, Slave Island, Beira Lake, Kollupitiya and the Town Hall area (about 5.3 × 4.5 km).
+**Status: v0.2 "Ride" (tuk-tuk, traffic, pedestrians and the coastal line train).** Map: the whole Colombo Municipal Council area, Colombo 1 to 15, from Mattakkuliya and the Kelani river in the north to Wellawatte in the south, plus the port and Port City (about 8 × 14 km, 88,000 buildings).
 
 ## What works
 
@@ -22,12 +22,12 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Drive anything: tuk-tuks are parked beside the spawn point and near most landmarks, and you can take any vehicle in traffic (car, van, bus, motorbike, bicycle, e-scooter). The driver climbs out and runs off; vehicles you leave stay where you left them. Each type has its own speed, acceleration, braking, turning circle and weight: a car does about 110 km/h, a bus is slow to start and wide in the turns, two-wheelers lean into corners, the bicycle has no engine noise, and you stand on the e-scooter. Taking vehicles is off near places of worship
 - Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only), motorbikes, bicycles and electric scooters. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
 - Pedestrians on the pavements: men in trousers or sarongs, women in sarees, school children in white uniforms. They walk, stop and stand by the road, cross side streets, step around you, and jump out of the way of your tuk-tuk. Traffic stops for them. Fewer people are out late at night
-- Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya and Kollupitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
+- Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya, Kollupitiya and Bambalapitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
 - Fighting and crashes: punch with F or the left mouse button and people are knocked down, lie there, then get up and run off. Hit people with the tuk-tuk at speed and they go down too. Ramming traffic shares momentum by mass: a bicycle or scooter is thrown aside and falls over, a car is shoved and spun, a bus barely moves and stops you dead. Crashed vehicles slide to a halt and then rejoin traffic. None of this works within 120 m of the Red Mosque, Gangaramaya Temple or Seema Malaka (places of worship are exploration only)
 - Aircraft overhead: airliners crossing high on the Bandaranaike approach and departure routes, and a lower turboprop, with navigation lights and strobes at night
 - Roads, bridges and causeways are walkable everywhere, so you can walk from Galle Face to the Lotus Tower
 - Synthesised sound: tuk-tuk engine, horns, train horn, bumps (N to mute)
-- Road and district readout, district banner, landmark cards and a 17-landmark checklist (saved in the browser)
+- Road and district readout, district banner, landmark cards and a 40-landmark checklist (saved in the browser): Fort and Pettah, Independence Square, the Racecourse, Nelum Pokuna, BMICH, Kotahena's churches and kovils, Wolvendaal Church, the stadiums, the malls on Galle Road, Port City and the Kelani bridge
 
 ## Setup
 
@@ -50,7 +50,7 @@ npm run data
 
 This runs two steps:
 
-1. `npm run data:fetch` downloads the Phase 1 area from the OpenStreetMap Overpass API into `data/raw/` (ignored by git).
+1. `npm run data:fetch` downloads the map area (about 40 MB) from the OpenStreetMap Overpass API into `data/raw/` (ignored by git).
 2. `npm run data:build` converts it to local metres, generates filler buildings and trees, and writes `public/data/city.json`.
 
 Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts).
@@ -60,6 +60,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | Key | Action |
 |---|---|
 | WASD | Move |
+| Z | Auto-run or cruise: keep moving forward without holding W, so a laptop touchpad keeps working for looking around. S stops it |
 | Mouse or arrow keys | Look (arrows let you turn the camera while moving on a touchpad) |
 | F or left mouse | Punch |
 | Shift | Sprint |
@@ -98,7 +99,7 @@ src/
   trains/           coastal line trains: timetable, station stops, boarding
   audio.ts          synthesised engine, horn and bump sounds
   ui/               minimap, full map, HUD
-public/data/city.json   generated map (about 2 MB)
+public/data/city.json   generated map (about 9.6 MB)
 ```
 
 ## Coordinates
@@ -116,7 +117,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - No swimming yet (v0.3).
 - Train routes come from OSM. Where OSM maps the double track as one line, the build step draws a second track 3.8 m away so trains in each direction have their own. Trains leave the map at the south edge and come back about a minute later.
 - Only the coastal line runs. The Main Line and Kelani Valley Line tracks are drawn but have no trains.
-- Crashes are arcade physics: no damage, no injuries shown, and traffic vehicles don't crash into each other on their own. St Anthony's Shrine and the Hindu kovils have no landmark entry yet, so the no-fighting zone only covers the Red Mosque, Gangaramaya and Seema Malaka.
+- Crashes are arcade physics: no damage, no injuries shown, and traffic vehicles don't crash into each other on their own. The no-fighting zone covers the places of worship in the landmark list (mosques, temples, churches and kovils); smaller ones elsewhere in the city are not covered yet.
 - Pedestrians use simple shapes and cross wherever their path takes them (no zebra crossings yet). They walk through trees and lamp posts.
 - No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
@@ -124,7 +125,9 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
 - Lamp light is painted at about 2.5 m per pixel, so pools are soft rather than sharp-edged.
 - Buildings are still built from OSM footprints, so a whole block mapped as one footprint is split into shop plots only along its street side. Awnings, verandah columns and balconies are visual only (you walk through the posts). Building shapes come from OSM alone; better footprints and heights (Overture, Google Open Buildings) would need a data download.
-- Only Phase 1 of the map. Areas south of Kollupitiya and east of Town Hall are not included yet.
+- Dewatagaha Mosque and Kayman's Gate are not mapped in OSM by name, so their landmark points are placed by hand and are approximate. Port City is mostly unbuilt in OSM.
+- Independence Memorial Hall and the other new landmarks are OSM footprints with the usual procedural styling, not hand-made models.
+- Buildings are built in full detail within about 500 m of you; further away each one is a plain box with a window pattern, so detail pops in as you move. Fast travel builds the nearest blocks first.
 
 ## Deployment
 

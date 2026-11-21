@@ -14,10 +14,20 @@ export class Input {
   free = false;
   /** re-request pointer lock on the next key press (a key press counts as a user gesture) */
   wantLock = false;
+  /**
+   * Auto-run (Z): keep moving forward without holding W. Laptop touchpads switch off while a key
+   * is held ("disable while typing"), so this frees the touchpad for looking around while you move.
+   * S cancels it.
+   */
+  autoRun = false;
 
   constructor(private el: HTMLElement) {
     window.addEventListener('keydown', (e) => {
-      if (!this.down.has(e.code)) this.pressed.add(e.code);
+      if (!this.down.has(e.code)) {
+        this.pressed.add(e.code);
+        if (e.code === 'KeyZ') this.autoRun = !this.autoRun;
+        if (e.code === 'KeyS') this.autoRun = false;
+      }
       this.down.add(e.code);
       if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (this.wantLock && !this.locked && e.code !== 'Escape') this.lock();
@@ -45,7 +55,7 @@ export class Input {
 
   /** WASD: move (or throttle and steer when driving) */
   axis() {
-    const f = (this.isDown('KeyW') ? 1 : 0) - (this.isDown('KeyS') ? 1 : 0);
+    const f = (this.isDown('KeyW') || this.autoRun ? 1 : 0) - (this.isDown('KeyS') ? 1 : 0);
     const r = (this.isDown('KeyD') ? 1 : 0) - (this.isDown('KeyA') ? 1 : 0);
     return { f, r };
   }
