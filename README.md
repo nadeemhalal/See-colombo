@@ -138,7 +138,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 
 ## Deployment
 
-The game is a static site (`npm run build` outputs `dist/`). Host it only on the company Vercel team account. It uses no user data and needs no environment variables; see [.env.example](.env.example).
+The game is a static site (`npm run build` outputs `dist/`). Any static host works (Vercel, Netlify, GitHub Pages, Cloudflare Pages). It uses no user data and needs no environment variables; see [.env.example](.env.example).
 
 ## Attribution
 

@@ -189,7 +189,7 @@ Requirements:
 - Runs in a browser, nothing to install, easy to share a link.
 - Looks "stylised-realistic": good light, shadows, water, fog and rain, but not GTA V-level detail.
 - Fastest to build and iterate. Claude can write almost all of it.
-- Hosting: company Vercel team account.
+- Hosting: any static host.
 
 ### Option B (higher realism): Unreal Engine 5
 - UE5 with Lumen lighting, Nanite, MetaHuman characters, Chaos vehicles.
