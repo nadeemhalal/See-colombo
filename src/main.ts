@@ -11,6 +11,7 @@ import { buildLandmarks } from './world/landmarks';
 import { Environment } from './world/environment';
 import { StreetLights } from './world/streetlights';
 import { Post } from './world/post';
+import { detectQuality, applyQuality, saveQuality } from './world/quality';
 import { setVehicleNight } from './traffic/models';
 import { Input } from './player/input';
 import { Character } from './player/character';
@@ -51,7 +52,7 @@ async function main() {
   const mask = buildLandMask(city.bounds, 2.5, city.coast, city.water, city.piers, city.land);
 
   const canvas = $('game') as HTMLCanvasElement;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -78,7 +79,9 @@ async function main() {
   scene.add(landmarks.group);
   const lamps = new StreetLights(city, mask, collision);
   scene.add(lamps.group);
-  const post = new Post(renderer, scene, camera);
+  let quality = detectQuality(renderer);
+  const post = new Post(renderer, scene, camera, quality === 'low' ? 0 : 4);
+  applyQuality(quality, renderer, post, env.sun);
   // the player's tuk-tuk headlight
   const headlight = new THREE.SpotLight(0xfff0d0, 0, 45, 0.55, 0.6, 1.4);
   headlight.position.set(0, 1.05, 1.3);
@@ -286,6 +289,14 @@ async function main() {
       $('banner').classList.add('show');
       outfitBannerT = 2;
     }
+    if (input.wasPressed('KeyG')) {
+      quality = quality === 'high' ? 'low' : 'high';
+      saveQuality(quality);
+      applyQuality(quality, renderer, post, env.sun);
+      $('banner').textContent = `Graphics: ${quality === 'high' ? 'High' : 'Low'}`;
+      $('banner').classList.add('show');
+      outfitBannerT = 2;
+    }
     if (outfitBannerT > 0 && (outfitBannerT -= dt) <= 0) $('banner').classList.remove('show');
     if (input.wasPressed('KeyT')) { timeRate = timeRate === 1 ? 20 : 1; $('clock').classList.toggle('fast', timeRate > 1); }
     if (input.wasPressed('BracketRight')) minutes += 60;
@@ -399,7 +410,7 @@ async function main() {
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {

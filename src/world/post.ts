@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 // Colour grade in linear HDR, before tone mapping: a little more saturation, warm tropical
 // highlights by day, cooler shadows at night, and a soft vignette.
@@ -40,27 +41,54 @@ export class Post {
   composer: EffectComposer;
   bloom: UnrealBloomPass;
   grade: ShaderPass;
+  fxaa: ShaderPass;
+  private w = 1;
+  private h = 1;
 
-  constructor(private renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+  constructor(private renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, samples = 4) {
     const size = renderer.getSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x || 1, size.y || 1, { type: THREE.HalfFloatType, samples: 4 });
+    this.w = size.x || 1; this.h = size.y || 1;
+    const rt = new THREE.WebGLRenderTarget(this.w, this.h, { type: THREE.HalfFloatType, samples });
     this.composer = new EffectComposer(renderer, rt);
     this.composer.setPixelRatio(renderer.getPixelRatio());
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.2, 0.55, 2.5);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.w / 2, this.h / 2), 0.2, 0.55, 2.5);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
+    // cheap edge smoothing for when multisampling is off (low quality)
+    this.fxaa = new ShaderPass(FXAAShader);
+    this.fxaa.enabled = samples === 0;
+    this.composer.addPass(this.fxaa);
+    this.updateFxaa();
+  }
+
+  /** Multisampling on the scene render: 4 on high quality, 0 (FXAA instead) on low. */
+  setSamples(samples: number) {
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      rt.samples = samples;
+      rt.dispose();
+    }
+    this.fxaa.enabled = samples === 0;
   }
 
   setSize(w: number, h: number) {
+    this.w = w; this.h = h;
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
+    this.updateFxaa();
+  }
+
+  private updateFxaa() {
+    const pr = this.renderer.getPixelRatio();
+    (this.fxaa.uniforms.resolution.value as THREE.Vector2).set(1 / (this.w * pr), 1 / (this.h * pr));
   }
 
   /** night: 0 day .. 1 night */
   update(night: number) {
+    // by day the bloom is barely visible, so skip the pass and save its cost
+    this.bloom.enabled = night > 0.12;
     this.bloom.strength = 0.07 + 0.73 * night;
     this.bloom.threshold = 3.2 - 2.4 * night;
     this.bloom.radius = 0.5 + 0.2 * night;

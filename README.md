@@ -10,8 +10,8 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - ~5,400 real building footprints, with heights from OSM where tagged (e.g. Altair 240 m, One Galle Face 194 m)
 - ~9,200 generated "filler" buildings along streets where OSM has no footprints, so blocks aren't empty
 - Procedural Lotus Tower (with its night light show)
-- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. Jointed figure with a face, hair and moustache, untucked shirt and rubber slippers. Walk and run cycles with knee and ankle motion, hip sway, arm swing, leaning into turns, landing squash, and looking around when idle
-- Four outfits (O to switch, remembered in the browser): office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
+- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. Jointed figure with the player's own face (a portrait texture projected onto the head), short curly hair, a navy palm-print shirt, khaki cargo trousers, white trainers and a wristwatch. Walk and run cycles with knee and ankle motion, hip sway, arm swing, leaning into turns, landing squash, and looking around when idle
+- Five outfits (O to switch, remembered in the browser): palm shirt and cargos (default), office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
 - Over-the-shoulder camera that pulls in when a wall is in the way
 - Real sun position for Colombo, day/night cycle, lit windows and shop signboards at night
 - Sri Lankan street look: faded pastel and colonial plaster walls with weather stains, clay tile hip roofs on houses and low buildings, roof parapets, floor ledges, blue and black rooftop water tanks, green shutters on colonial buildings, painted shop signboards and window grilles
@@ -72,6 +72,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | N | Mute sound |
 | R | Back to Galle Face Green |
 | O | Change outfit |
+| G | Graphics quality: High or Low (Low is picked automatically on integrated graphics) |
 | H | Show controls |
 | Esc | Pause |
 
@@ -103,7 +104,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 
 ## Known limitations
 
-- The character is still made from simple shapes (no textures, skinning or cloth). A rigged model would look more realistic but needs a licensed or commissioned asset.
+- The character is still made from simple shapes. The face is a photo projected from the front, so it looks right from the front and fades to plain skin at the sides; it does not move (no blinking or talking). A rigged, sculpted model would look more realistic but needs a licensed or commissioned asset.
 - Filler buildings are guesses. They follow streets but won't match real buildings.
 - Building heights without OSM tags are estimated from footprint size and area.
 - Ground is flat (Colombo is mostly 0 to 10 m). Elevation data is planned for v0.3.
@@ -114,7 +115,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
 - Only tuk-tuks can be driven. Traffic vehicles can't be entered.
-- Bloom and real lamp lights cost some frame rate on slower GPUs. There is no graphics quality setting yet.
+- On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
 - Buildings are still extruded footprints with shader detail. There are no balconies, verandah pillars or modelled shopfronts yet.
 - Only Phase 1 of the map. Areas south of Kollupitiya and east of Town Hall are not included yet.
 

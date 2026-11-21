@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * The protagonist: a procedural, jointed figure (no external assets) with a hand-tuned gait.
@@ -17,17 +18,73 @@ export interface Outfit {
   /** t-shirt (no collar or buttons) instead of a collared shirt */
   tee?: boolean;
   slipper: number;
+  /** printed shirt fabric (the shirt colour is then ignored) */
+  print?: 'palm';
+  /** side cargo pockets on the trousers */
+  cargo?: boolean;
+  /** trainers instead of rubber slippers */
+  sneakers?: boolean;
+  watch?: boolean;
 }
 
 export const OUTFITS: Outfit[] = [
+  { name: 'Palm shirt and cargos', shirt: 0x1d2134, lower: 0xc2ab86, slipper: 0x23324d, print: 'palm', cargo: true, sneakers: true, watch: true },
   { name: 'Office shirt and trousers', shirt: 0x9cc3e4, lower: 0x2f3542, slipper: 0x23324d },
   { name: 'Sarong and white shirt', shirt: 0xf1eee6, lower: 0x2c4a7a, sarong: true, slipper: 0x6b4a2e },
   { name: 'T-shirt and jeans', shirt: 0xc0392b, lower: 0x3b5373, tee: true, slipper: 0x1f1f1f },
   { name: 'Batik shirt', shirt: 0xd9822b, lower: 0x4a4038, slipper: 0x3a2a1d },
 ];
 
-const SKIN = 0x8a5a3c;
+const SKIN = 0x9a6546; // matched to the player's portrait
 const HAIR = 0x15110e;
+
+/** Navy camp-shirt fabric with faded palm-tree silhouettes, drawn once on a canvas. */
+let palmTexture: THREE.CanvasTexture | null = null;
+function palmFabric() {
+  if (palmTexture) return palmTexture;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1b1f31';
+  g.fillRect(0, 0, 256, 256);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const palm = (x: number, y: number, h: number, lean: number, fronds: number[]) => {
+    g.strokeStyle = 'rgba(132, 118, 108, 0.6)';
+    g.lineCap = 'round';
+    // trunk
+    g.lineWidth = h * 0.05;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + lean * 0.5, y - h * 0.5, x + lean, y - h);
+    g.stroke();
+    // fronds: drooping arcs from the crown
+    const cx = x + lean, cy = y - h;
+    g.lineWidth = h * 0.035;
+    for (let i = 0; i < 7; i++) {
+      const a = -Math.PI * 0.95 + (i / 6) * Math.PI * 0.9 + fronds[i * 2];
+      const len = h * (0.42 + fronds[i * 2 + 1]);
+      const ex = cx + Math.cos(a) * len, ey = cy + Math.sin(a) * len * 0.55 + len * 0.35;
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.quadraticCurveTo(cx + Math.cos(a) * len * 0.6, cy + Math.sin(a) * len * 0.75, ex, ey);
+      g.stroke();
+    }
+  };
+  // tile-safe: draw each palm at its position and at its wrapped copies
+  for (let i = 0; i < 11; i++) {
+    const x = rnd() * 256, y = 60 + rnd() * 196, h = 50 + rnd() * 35, lean = (rnd() - 0.5) * 22;
+    const fronds: number[] = [];
+    for (let f = 0; f < 7; f++) fronds.push((rnd() - 0.5) * 0.2, rnd() * 0.15);
+    for (const dx of [-256, 0, 256]) for (const dy of [-256, 0, 256]) palm(x + dx, y + dy, h, lean, fronds);
+  }
+  palmTexture = new THREE.CanvasTexture(c);
+  palmTexture.colorSpace = THREE.SRGBColorSpace;
+  palmTexture.wrapS = palmTexture.wrapT = THREE.RepeatWrapping;
+  palmTexture.repeat.set(5, 3);
+  palmTexture.anisotropy = 4;
+  return palmTexture;
+}
 
 const smooth = (e0: number, e1: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
@@ -53,7 +110,11 @@ export class Character {
   private legs: [Leg, Leg];
   private arms: [Arm, Arm];
 
-  private mat: Record<'skin' | 'shirt' | 'lower' | 'leg' | 'slipper' | 'sole' | 'hair' | 'eye' | 'iris' | 'lip' | 'belt' | 'button', THREE.MeshStandardMaterial>;
+  private mat: Record<'skin' | 'shirt' | 'lower' | 'leg' | 'slipper' | 'sole' | 'hair' | 'eye' | 'iris' | 'lip' | 'belt' | 'button' | 'shoe' | 'shoeTrim' | 'watch', THREE.MeshStandardMaterial>;
+  private cargoParts: THREE.Object3D[] = [];
+  private slipperParts: THREE.Object3D[] = [];
+  private sneakerParts: THREE.Object3D[] = [];
+  private watchParts: THREE.Object3D[] = [];
   private trouserParts: THREE.Object3D[] = [];
   private sarongParts: THREE.Object3D[] = [];
   private collarParts: THREE.Object3D[] = [];
@@ -79,7 +140,9 @@ export class Character {
       skin: std(SKIN, 0.65), shirt: std(0x9cc3e4, 0.85), lower: std(0x2f3542, 0.9), leg: std(0x2f3542, 0.9),
       slipper: std(0x23324d, 0.7), sole: std(0xe8e4dc, 0.9), hair: std(HAIR, 0.75), eye: std(0xf2efe8, 0.4),
       iris: std(0x1c120c, 0.3), lip: std(0x5e3426, 0.6), belt: std(0x2a1f18, 0.5), button: std(0xf4f2ec, 0.4),
+      shoe: std(0xe8e6e1, 0.6), shoeTrim: std(0xaaa59d, 0.6), watch: std(0x1e1c1b, 0.35),
     };
+    this.mat.watch.metalness = 0.4;
     const m = this.mat;
     const mesh = (g: THREE.BufferGeometry, mt: THREE.Material, x = 0, y = 0, z = 0) => {
       const o = new THREE.Mesh(g, mt);
@@ -139,31 +202,72 @@ export class Character {
     this.neck.add(mesh(new THREE.CylinderGeometry(0.048, 0.056, 0.11, 12), m.skin, 0, 0.04, 0));
     this.head.position.y = 0.075;
     this.neck.add(this.head);
-    const skull = mesh(new THREE.SphereGeometry(0.105, 22, 16), m.skin, 0, 0.1, -0.005);
-    skull.scale.set(0.86, 1.04, 0.98);
-    this.head.add(skull);
-    const jaw = mesh(new THREE.SphereGeometry(0.075, 16, 10), m.skin, 0, 0.045, 0.022);
-    jaw.scale.set(1.05, 0.85, 1);
-    this.head.add(jaw);
+    // skull and jaw, baked into head space so the face projection below can use the vertex position
+    const skullGeo = new THREE.SphereGeometry(0.105, 28, 20).scale(0.86, 1.04, 0.98).translate(0, 0.1, -0.005);
+    const jawGeo = new THREE.SphereGeometry(0.075, 20, 12).scale(1.05, 0.85, 1).translate(0, 0.045, 0.022);
+    // the face: the player's own portrait, projected straight from the front onto the skull and
+    // jaw and faded to the skin colour as the surface turns away, so there is no seam
+    const faceTex = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}textures/player-face.jpg`);
+    faceTex.colorSpace = THREE.SRGBColorSpace;
+    faceTex.anisotropy = 4;
+    const faceMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.62 });
+    faceMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uFace = { value: faceTex };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+          varying vec3 vHeadP;
+          varying vec3 vHeadN;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vHeadP = position;
+          vHeadN = normal;`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform sampler2D uFace;
+          varying vec3 vHeadP;
+          varying vec3 vHeadN;`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec2 fuv = vec2((vHeadP.x + 0.097) / 0.194, (vHeadP.y + 0.025) / 0.23);
+            float inside = step(0.0, fuv.x) * step(fuv.x, 1.0) * step(0.0, fuv.y) * step(fuv.y, 1.0);
+            float facing = smoothstep(0.3, 0.7, normalize(vHeadN).z);
+            diffuseColor.rgb = mix(diffuseColor.rgb, texture2D(uFace, fuv).rgb, facing * inside);
+          }`);
+    };
+    faceMat.customProgramCacheKey = () => 'player-face';
+    this.head.add(mesh(skullGeo, faceMat), mesh(jawGeo, faceMat));
     for (const s of [1, -1]) {
       const ear = mesh(new THREE.SphereGeometry(0.024, 8, 6), m.skin, 0.088 * s, 0.1, -0.005);
       ear.scale.set(0.45, 1, 0.8);
       this.head.add(ear);
-      this.head.add(mesh(new THREE.SphereGeometry(0.0145, 10, 8), m.eye, 0.033 * s, 0.115, 0.083));
-      this.head.add(mesh(new THREE.SphereGeometry(0.0085, 8, 6), m.iris, 0.033 * s, 0.115, 0.095));
-      const brow = mesh(new THREE.BoxGeometry(0.032, 0.008, 0.01), m.hair, 0.034 * s, 0.137, 0.088);
-      brow.rotation.z = -0.12 * s;
-      this.head.add(brow);
     }
-    const nose = mesh(new THREE.ConeGeometry(0.016, 0.042, 8), m.skin, 0, 0.09, 0.1);
-    nose.rotation.x = Math.PI / 2 - 0.35;
-    this.head.add(nose);
-    this.head.add(mesh(new THREE.BoxGeometry(0.036, 0.007, 0.01), m.lip, 0, 0.048, 0.091));
-    const tache = mesh(new THREE.BoxGeometry(0.05, 0.011, 0.012), m.hair, 0, 0.064, 0.094); // moustache
-    this.head.add(tache);
-    const hair = mesh(new THREE.SphereGeometry(0.112, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), m.hair, 0, 0.115, -0.012);
+    // hair: a cap tilted back so the hairline sits above the forehead, covered in curls
+    const hairGroup = new THREE.Group();
+    hairGroup.position.set(0, 0.115, -0.012);
+    hairGroup.rotation.x = -0.45;
+    this.head.add(hairGroup);
+    const hair = mesh(new THREE.SphereGeometry(0.112, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), m.hair);
     hair.scale.set(0.9, 0.95, 1.02);
-    this.head.add(hair);
+    hairGroup.add(hair);
+    {
+      // short curly hair, fuller on top: low-poly curls scattered over the cap, merged into one mesh
+      const curls: THREE.BufferGeometry[] = [];
+      let k = 1;
+      const jit = () => ((k = (k * 48271) % 2147483647) / 2147483647) - 0.5;
+      for (let ring = 0; ring < 7; ring++) {
+        const theta = Math.min(ring * 0.27, 1.5); // from the crown down to the rim
+        const n = ring === 0 ? 1 : 6 + ring * 3;
+        for (let j = 0; j < n; j++) {
+          const phi = (j / n) * Math.PI * 2 + ring * 0.4 + jit() * 0.3;
+          // the cap is tilted back, so its front rim is the hairline: run curls right down to it
+          if (theta > 1.35 && Math.sin(phi) > -0.2 && Math.sin(phi) < 0.5) continue;
+          const r = 0.112 * (1.02 + (ring < 3 ? 0.08 : 0));
+          const cg = new THREE.IcosahedronGeometry(0.024 + jit() * 0.008 + (ring < 3 ? 0.006 : 0), 0);
+          cg.translate(Math.sin(theta) * Math.cos(phi) * r * 0.92, Math.cos(theta) * r * 0.97, Math.sin(theta) * Math.sin(phi) * r * 1.04);
+          curls.push(cg);
+        }
+      }
+      hairGroup.add(mesh(mergeGeometries(curls)!, m.hair));
+    }
     const back = mesh(new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.35), m.hair, 0, 0.1, -0.022);
     back.scale.set(0.9, 1, 0.95);
     back.rotation.x = -0.5;
@@ -183,6 +287,13 @@ export class Character {
       shoulder.add(elbow);
       elbow.add(mesh(new THREE.SphereGeometry(0.038, 10, 8), m.skin));
       elbow.add(mesh(new THREE.CylinderGeometry(0.037, 0.03, 0.24, 12), m.skin, 0, -0.12, 0));
+      if (side === 1) { // a wristwatch on the left arm
+        const band = mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.022, 12, 1, true), m.watch, 0, -0.215, 0);
+        const face = mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.01, 12), m.watch, 0.034, -0.215, 0);
+        face.rotation.z = Math.PI / 2;
+        elbow.add(band, face);
+        this.watchParts.push(band, face);
+      }
       const wrist = new THREE.Group();
       wrist.position.y = -0.245;
       elbow.add(wrist);
@@ -205,6 +316,12 @@ export class Character {
       this.pelvis.add(hip);
       const thigh = mesh(new THREE.CylinderGeometry(0.083, 0.063, 0.44, 14), m.leg, 0, -0.22, 0);
       hip.add(thigh);
+      const pocket = mesh(new THREE.BoxGeometry(0.03, 0.15, 0.11), m.lower, 0.072 * side, -0.29, 0);
+      pocket.rotation.z = 0.05 * side;
+      const flap = mesh(new THREE.BoxGeometry(0.036, 0.035, 0.118), m.lower, 0.076 * side, -0.215, 0);
+      flap.rotation.z = 0.05 * side;
+      hip.add(pocket, flap);
+      this.cargoParts.push(pocket, flap);
       const knee = new THREE.Group();
       knee.position.y = -0.44;
       hip.add(knee);
@@ -223,11 +340,24 @@ export class Character {
       ankle.add(sole);
       const strapTop = mesh(new THREE.BoxGeometry(0.1, 0.012, 0.02), m.slipper, 0, -0.053, 0.05);
       ankle.add(strapTop);
+      this.slipperParts.push(foot, sole, strapTop);
       for (const s of [1, -1]) {
         const strap = mesh(new THREE.BoxGeometry(0.012, 0.012, 0.09), m.slipper, 0.025 * s, -0.04, 0.1);
         strap.rotation.y = -0.4 * s;
         ankle.add(strap);
+        this.slipperParts.push(strap);
       }
+      // trainers: a rounded upper, a grey side panel and a thick white sole
+      const upper = mesh(new THREE.CapsuleGeometry(0.05, 0.15, 4, 12), m.shoe, 0, -0.03, 0.05);
+      upper.rotation.x = Math.PI / 2;
+      upper.scale.set(1.08, 1, 0.78);
+      const panel = mesh(new THREE.CapsuleGeometry(0.051, 0.07, 3, 10), m.shoeTrim, 0, -0.035, 0.02);
+      panel.rotation.x = Math.PI / 2;
+      panel.scale.set(1.12, 1, 0.55);
+      const tread = mesh(new THREE.BoxGeometry(0.112, 0.03, 0.27), m.sole, 0, -0.063, 0.05);
+      const cuff = mesh(new THREE.CylinderGeometry(0.05, 0.053, 0.045, 12), m.shoe, 0, -0.005, -0.012);
+      ankle.add(upper, panel, tread, cuff);
+      this.sneakerParts.push(upper, panel, tread, cuff);
       return { hip, knee, ankle };
     };
     this.legs = [makeLeg(1), makeLeg(-1)];
@@ -241,7 +371,12 @@ export class Character {
   setOutfit(i: number) {
     this.outfit = ((i % OUTFITS.length) + OUTFITS.length) % OUTFITS.length;
     const o = OUTFITS[this.outfit];
-    this.mat.shirt.color.setHex(o.shirt);
+    const fabric = o.print === 'palm' ? palmFabric() : null;
+    if (this.mat.shirt.map !== fabric) {
+      this.mat.shirt.map = fabric;
+      this.mat.shirt.needsUpdate = true;
+    }
+    this.mat.shirt.color.setHex(fabric ? 0xffffff : o.shirt);
     this.mat.lower.color.setHex(o.lower);
     // under a sarong the legs are bare
     this.mat.leg.color.setHex(o.sarong ? SKIN : o.lower);
@@ -249,6 +384,10 @@ export class Character {
     for (const p of this.trouserParts) p.visible = !o.sarong;
     for (const p of this.sarongParts) p.visible = !!o.sarong;
     for (const p of this.collarParts) p.visible = !o.tee;
+    for (const p of this.cargoParts) p.visible = !!o.cargo && !o.sarong;
+    for (const p of this.slipperParts) p.visible = !o.sneakers;
+    for (const p of this.sneakerParts) p.visible = !!o.sneakers;
+    for (const p of this.watchParts) p.visible = !!o.watch;
     return o;
   }
 
