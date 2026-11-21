@@ -16,9 +16,11 @@ interface Agent {
   stopT: number;
   ghostT: number;
   honkT: number;
+  /** crash: shoved off its lane, sliding and spinning until it stops, then it rejoins traffic */
+  crashT: number; cvx: number; cvz: number; spin: number; tilt: number;
 }
 
-const COUNT = 110;
+const COUNT = 140;
 const SPAWN_MIN = 70, SPAWN_MAX = 280, DESPAWN = 340;
 const ROAD_Y = 0.07;
 
@@ -36,7 +38,8 @@ export class Traffic {
   private hash = new Map<number, number[]>();
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
-  private up = new THREE.Vector3(0, 1, 0);
+
+  private eul = new THREE.Euler();
   /** called when a car honks at the player (distance in metres) */
   onHonk: (dist: number) => void = () => {};
 
@@ -55,7 +58,7 @@ export class Traffic {
         c.setHex(t.colors[Math.floor(rand() * t.colors.length)]);
         mesh.setColorAt(i, c);
         const a: Agent = { type: ti, inst: i, edge: -1, s: 0, lane: 0, speed: 0, factor: 0.85 + rand() * 0.3,
-          x: 0, z: 0, heading: 0, stopT: 0, ghostT: 0, honkT: 0 };
+          x: 0, z: 0, heading: 0, stopT: 0, ghostT: 0, crashT: 0, cvx: 0, cvz: 0, spin: 0, tilt: 0, honkT: 0 };
         this.spawn(a, start, 20, SPAWN_MAX);
         this.agents.push(a);
       }
@@ -90,6 +93,40 @@ export class Traffic {
     a.stopT = 0;
   }
 
+  /**
+   * The player's vehicle (circle at x,z with radius r, velocity vx,vz, mass in tonnes) rams traffic.
+   * Momentum is shared out by mass: a bicycle flies, a bus barely moves. Returns the share of the
+   * player's speed lost (0..1) and the impact strength, for sound.
+   */
+  ram(x: number, z: number, r: number, vx: number, vz: number, mass: number): { loss: number; impact: number } {
+    let loss = 0, impact = 0;
+    for (const a of this.agents) {
+      if (a.edge < 0) continue;
+      const t = VEHICLE_TYPES[a.type];
+      // nearest point on the vehicle's centre line
+      const hx = Math.sin(a.heading), hz = Math.cos(a.heading), half = Math.max(0, t.len / 2 - t.width / 2);
+      const along = THREE.MathUtils.clamp((x - a.x) * hx + (z - a.z) * hz, -half, half);
+      const px = a.x + hx * along, pz = a.z + hz * along;
+      const dx = px - x, dz = pz - z, d = Math.hypot(dx, dz);
+      if (d > r + t.width / 2 + 0.15 || d < 1e-4) continue;
+      const nx = dx / d, nz = dz / d;
+      const closing = vx * nx + vz * nz - (a.crashT > 0 ? a.cvx * nx + a.cvz * nz : a.speed * (hx * nx + hz * nz));
+      if (closing < 1) continue;
+      const m2 = t.mass;
+      const push = (2 * mass / (mass + m2)) * closing * 0.75;
+      a.cvx = (a.crashT > 0 ? a.cvx : hx * a.speed) + nx * push + vx * 0.15 * (mass / (mass + m2));
+      a.cvz = (a.crashT > 0 ? a.cvz : hz * a.speed) + nz * push + vz * 0.15 * (mass / (mass + m2));
+      // off-centre hits spin the vehicle
+      a.spin += (along / Math.max(0.5, t.len / 2)) * push * 0.6 + (rand() - 0.5) * push * 0.2;
+      a.speed = 0;
+      a.crashT = 3.5 + Math.min(3, push * 0.4);
+      if (t.twoWheel && push > 1.5) a.tilt = 0.001;
+      loss = Math.max(loss, m2 / (mass + m2));
+      impact = Math.max(impact, closing);
+    }
+    return { loss, impact };
+  }
+
   private place(a: Agent, edge: number, s: number, lane: number) {
     const e = this.graph.edges[edge];
     const n = this.graph.nodes[e.a];
@@ -98,6 +135,24 @@ export class Traffic {
     a.x = n.x + e.dx * s + e.dz * off;
     a.z = n.z + e.dz * s - e.dx * off;
     a.heading = Math.atan2(e.dx, e.dz);
+  }
+
+  /** after a crash: slide with tyre friction, spin down, two-wheelers fall over, then rejoin the lane */
+  private slide(a: Agent, dt: number) {
+    const t = VEHICLE_TYPES[a.type];
+    a.x += a.cvx * dt; a.z += a.cvz * dt;
+    const f = Math.exp(-(t.twoWheel ? 3.5 : 2.4) * dt);
+    a.cvx *= f; a.cvz *= f;
+    a.heading += a.spin * dt;
+    a.spin *= Math.exp(-2.2 * dt);
+    if (a.tilt) a.tilt = Math.min(Math.PI / 2 - 0.15, a.tilt + dt * 5);
+    a.crashT -= dt;
+    if (a.crashT <= 0) {
+      // back onto the road: nearest point of its current edge, then the normal lane smoothing takes over
+      const e = this.graph.edges[a.edge], n = this.graph.nodes[e.a];
+      a.s = THREE.MathUtils.clamp((a.x - n.x) * e.dx + (a.z - n.z) * e.dz, 0, e.len);
+      a.tilt = 0; a.spin = 0; a.cvx = a.cvz = 0; a.crashT = 0;
+    }
   }
 
   private key(x: number, z: number) { return (Math.floor(x / 16) + 2000) * 4000 + Math.floor(z / 16) + 2000; }
@@ -139,6 +194,7 @@ export class Traffic {
         if (a.edge < 0) continue;
       }
       const t: VehicleType = VEHICLE_TYPES[a.type];
+      if (a.crashT > 0) { this.slide(a, dt); continue; }
       const e = g.edges[a.edge];
       let want = Math.min(t.maxSpeed, e.speed) * a.factor;
 
@@ -227,7 +283,7 @@ export class Traffic {
       if (a.edge < 0) {
         this.m4.makeScale(0, 0, 0);
       } else {
-        this.q.setFromAxisAngle(this.up, a.heading);
+        this.q.setFromEuler(this.eul.set(0, a.heading, a.tilt, 'YXZ'));
         this.m4.compose(new THREE.Vector3(a.x, ROAD_Y, a.z), this.q, new THREE.Vector3(1, 1, 1));
       }
       mesh.setMatrixAt(a.inst, this.m4);

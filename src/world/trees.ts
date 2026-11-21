@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addLampLight } from './lamplight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CityData } from '../types';
 import type { Collision } from './collision';
@@ -68,6 +69,7 @@ export function buildTrees(city: CityData, collision: Collision): THREE.Group {
     frond: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide }),
     leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
   };
+  for (const m of Object.values(mats)) addLampLight(m, 0.7);
 
   const byChunk = new Map<string, number[]>();
   const t = city.trees;

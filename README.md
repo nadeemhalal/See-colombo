@@ -9,19 +9,22 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Real street layout, coastline, Beira Lake, rail lines, parks and trees from OpenStreetMap
 - ~5,400 real building footprints, with heights from OSM where tagged (e.g. Altair 240 m, One Galle Face 194 m)
 - ~9,200 generated "filler" buildings along streets where OSM has no footprints, so blocks aren't empty
-- Procedural Lotus Tower (with its night light show)
+- Procedural Lotus Tower: stepped podium sized to sit clear of the surrounding roads, ribbed green shaft, two layers of lotus petals and an observation deck, with its night light show
 - Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. Jointed figure with the player's own face (a portrait texture projected onto the head), short curly hair, a navy palm-print shirt, khaki cargo trousers, white trainers and a wristwatch. Walk and run cycles with knee and ankle motion, hip sway, arm swing, leaning into turns, landing squash, and looking around when idle
 - Five outfits (O to switch, remembered in the browser): palm shirt and cargos (default), office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
 - Over-the-shoulder camera that pulls in when a wall is in the way
-- Real sun position for Colombo, day/night cycle, lit windows and shop signboards at night
+- Real sun position for Colombo, a full day every 10 real minutes (T for 10x faster), lit windows and shop signboards at night
 - Sri Lankan street look: faded pastel and colonial plaster walls with weather stains, clay tile hip roofs on houses and low buildings, roof parapets, floor ledges, blue and black rooftop water tanks, green shutters on colonial buildings, painted shop signboards and window grilles
 - Ground detail: patched asphalt, concrete pavement slabs, raised kerbs, white edge lines on main roads, sunburnt grass and red laterite soil
-- Lighting: about 4,500 orange sodium street lamps along the roads, with light pools on the ground and real lights near you; tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
+- Lighting: about 4,500 orange sodium street lamps along the roads, lighting the road, pavement, walls, cars and people beneath them through a city-wide light map (light in the world, not glare on the screen); tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
 - Rotating minimap with street names, full-screen map with click-to-fast-travel
 - Drivable tuk-tuks: one beside the spawn point and one parked on the kerb near most landmarks. Arcade handling, reverse, brake, body lean, horn
-- Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only) and motorbikes. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
+- Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only), motorbikes, bicycles and electric scooters. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
 - Pedestrians on the pavements: men in trousers or sarongs, women in sarees, school children in white uniforms. They walk, stop and stand by the road, cross side streets, step around you, and jump out of the way of your tuk-tuk. Traffic stops for them. Fewer people are out late at night
 - Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya and Kollupitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
+- Fighting and crashes: punch with F or the left mouse button and people are knocked down, lie there, then get up and run off. Hit people with the tuk-tuk at speed and they go down too. Ramming traffic shares momentum by mass: a bicycle or scooter is thrown aside and falls over, a car is shoved and spun, a bus barely moves and stops you dead. Crashed vehicles slide to a halt and then rejoin traffic. None of this works within 120 m of the Red Mosque, Gangaramaya Temple or Seema Malaka (places of worship are exploration only)
+- Aircraft overhead: airliners crossing high on the Bandaranaike approach and departure routes, and a lower turboprop, with navigation lights and strobes at night
+- Roads, bridges and causeways are walkable everywhere, so you can walk from Galle Face to the Lotus Tower
 - Synthesised sound: tuk-tuk engine, horns, train horn, bumps (N to mute)
 - Road and district readout, district banner, landmark cards and a 17-landmark checklist (saved in the browser)
 
@@ -55,8 +58,9 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 
 | Key | Action |
 |---|---|
-| WASD / arrows | Move |
-| Mouse | Look |
+| WASD | Move |
+| Mouse or arrow keys | Look (arrows let you turn the camera while moving on a touchpad) |
+| F or left mouse | Punch |
 | Shift | Sprint |
 | C or Ctrl | Walk |
 | Space | Jump (hold into a low wall to climb it) |
@@ -74,7 +78,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | O | Change outfit |
 | G | Graphics quality: High or Low (Low is picked automatically on integrated graphics) |
 | H | Show controls |
-| Esc | Pause |
+| Esc | Pause and resume. Any key starts the game; no clicking needed |
 
 ## Project layout
 
@@ -111,11 +115,13 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - No swimming yet (v0.3).
 - Train routes come from OSM. Where OSM maps the double track as one line, the build step draws a second track 3.8 m away so trains in each direction have their own. Trains leave the map at the south edge and come back about a minute later.
 - Only the coastal line runs. The Main Line and Kelani Valley Line tracks are drawn but have no trains.
+- Crashes are arcade physics: no damage, no injuries shown, and traffic vehicles don't crash into each other on their own. St Anthony's Shrine and the Hindu kovils have no landmark entry yet, so the no-fighting zone only covers the Red Mosque, Gangaramaya and Seema Malaka.
 - Pedestrians use simple shapes and cross wherever their path takes them (no zebra crossings yet). They walk through trees and lamp posts.
 - No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
 - Only tuk-tuks can be driven. Traffic vehicles can't be entered.
 - On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
+- Lamp light is painted at about 2.5 m per pixel, so pools are soft rather than sharp-edged.
 - Buildings are still extruded footprints with shader detail. There are no balconies, verandah pillars or modelled shopfronts yet.
 - Only Phase 1 of the map. Areas south of Kollupitiya and east of Town Hall are not included yet.
 

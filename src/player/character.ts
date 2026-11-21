@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addLampLight } from '../world/lamplight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
@@ -109,6 +110,9 @@ export class Character {
   private head = new THREE.Group();
   private legs: [Leg, Leg];
   private arms: [Arm, Arm];
+  /** seconds into the current punch (0 = not punching) */
+  private punchT = 0;
+  private punchSide = 1;
 
   private mat: Record<'skin' | 'shirt' | 'lower' | 'leg' | 'slipper' | 'sole' | 'hair' | 'eye' | 'iris' | 'lip' | 'belt' | 'button' | 'shoe' | 'shoeTrim' | 'watch', THREE.MeshStandardMaterial>;
   private cargoParts: THREE.Object3D[] = [];
@@ -143,6 +147,7 @@ export class Character {
       shoe: std(0xe8e6e1, 0.6), shoeTrim: std(0xaaa59d, 0.6), watch: std(0x1e1c1b, 0.35),
     };
     this.mat.watch.metalness = 0.4;
+    for (const mt of Object.values(this.mat)) addLampLight(mt);
     const m = this.mat;
     const mesh = (g: THREE.BufferGeometry, mt: THREE.Material, x = 0, y = 0, z = 0) => {
       const o = new THREE.Mesh(g, mt);
@@ -234,6 +239,7 @@ export class Character {
           }`);
     };
     faceMat.customProgramCacheKey = () => 'player-face';
+    addLampLight(faceMat);
     this.head.add(mesh(skullGeo, faceMat), mesh(jawGeo, faceMat));
     for (const s of [1, -1]) {
       const ear = mesh(new THREE.SphereGeometry(0.024, 8, 6), m.skin, 0.088 * s, 0.1, -0.005);
@@ -391,6 +397,14 @@ export class Character {
     return o;
   }
 
+  /** throw a punch, alternating hands. Returns false while one is still in progress. */
+  punch(): boolean {
+    if (this.punchT > 0) return false;
+    this.punchT = 1e-4;
+    this.punchSide = 1 - this.punchSide;
+    return true;
+  }
+
   /** speed in m/s, airborne state, vertical velocity */
   animate(dt: number, speed: number, onGround: boolean, velY: number, sprint: boolean) {
     this.time += dt;
@@ -505,6 +519,22 @@ export class Character {
     this.head.rotation.y = this.look - this.spine.rotation.y - this.pelvis.rotation.y;
     this.head.rotation.x = -lean * 0.6;
     this.head.rotation.z = -this.bank * 0.5;
+
+    // punch over the top of the gait: wind up, jab straight out at shoulder height, recover
+    if (this.punchT > 0) {
+      this.punchT += dt;
+      const D = 0.42, t = this.punchT / D;
+      if (t >= 1) this.punchT = 0;
+      else {
+        const out = t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7;
+        const e = out * out * (3 - 2 * out);
+        const arm = this.arms[this.punchSide], s = this.punchSide === 0 ? 1 : -1;
+        arm.shoulder.rotation.x = THREE.MathUtils.lerp(arm.shoulder.rotation.x, -1.5, e);
+        arm.shoulder.rotation.z = THREE.MathUtils.lerp(arm.shoulder.rotation.z, -0.15 * s, e);
+        arm.elbow.rotation.x = THREE.MathUtils.lerp(arm.elbow.rotation.x, -0.05, e);
+        this.spine.rotation.y += e * 0.45 * s;
+      }
+    }
   }
 
   /** static pose helper for sitting */

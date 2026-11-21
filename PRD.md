@@ -114,13 +114,14 @@ Tier 2 (later): Independence Memorial Hall, Town Hall, Viharamahadevi Park, Nati
 | Action | Default key (PC) | Gamepad |
 |---|---|---|
 | Move | WASD | Left stick |
-| Look / camera | Mouse | Right stick |
+| Look / camera | Mouse or arrow keys | Right stick |
+| Punch | F / left mouse | X / Square |
 | Sprint | Shift | L3 / hold |
 | Jump | Space | A / Cross |
 | Crouch / walk slow | C / Ctrl | B / Circle |
 | Interact / enter vehicle | E | Y / Triangle |
 | Map | M | Back / Touchpad |
-| Pause | Esc | Start |
+| Pause / resume | Esc (any key starts; no click needed) | Start |
 
 Requirements:
 - Third-person camera behind the shoulder, collides with walls, zooms in tight spaces (Pettah lanes).
@@ -136,7 +137,7 @@ Requirements:
 - Pedestrians walking on pavements, waiting at bus stops, crossing at junctions.
 - Traffic following lanes on real roads: tuk-tuks, buses, vans, cars, bikes.
 - Street dogs and crows.
-- Day/night cycle tied to real Colombo sun position (with time-of-day override). Street lights and lit windows at night.
+- Day/night cycle tied to real Colombo sun position (with time-of-day override). One game day lasts 10 real minutes. Street lights and lit windows at night.
 - Weather: clear, humid haze, afternoon monsoon downpour with wet roads.
 - Ambient sound: traffic, horns, sea, rail, call to prayer and temple bells at appropriate places and times, kept respectful.
 
@@ -253,6 +254,11 @@ Because this is a real city with real communities, these need care before anythi
 - Done: coastal line trains. The data build finds the route over main-line tracks from Maradana to the south map edge (Dijkstra, preferring ways named Coast Line), clips it at the map edge, and splits the shared single-mapped track into two left-hand tracks. Two 4-car maroon DMUs run opposite ways, stop 25 s at each station (45 s at Maradana), brake for the player and cars on the line, and can be boarded and ridden from the doorway.
 - Done: look and lighting pass, aiming for a stylised, warm and colourful look with a Sri Lankan feel (no assets copied from other games). Post-processing: bloom and a colour grade (saturation, warm highlights, cool night shadows, vignette). Brighter, readable nights: stronger moon and sky fill, a twilight lift around sunset, about 4,500 sodium street lamps (instanced, with 6 real point lights following the player), vehicle head and tail light glow, and a tuk-tuk headlight. The daytime sky is dimmed and saturated so it reads blue instead of white. Buildings: pastel and colonial palettes, plaster noise, clay tile hip roofs, parapets, ledges, water tanks, shutters, grilles and signboards. Ground: world-space shader detail for asphalt, slabs, grass and soil, plus kerbs and edge lines.
 - Done: graphics quality setting (G). Low is picked automatically for integrated and mobile GPUs: pixel ratio 1, FXAA instead of 4x MSAA, 1024 shadow map. Bloom is skipped by day on both settings.
+- Done: Esc pauses and resumes; any key starts; arrow keys turn the camera while moving.
+- Done: street lamps light the world through a light map instead of screen glow; bloom reduced.
+- Done: Lotus Tower rebuilt (podium sized clear of the roads, ribbed shaft, petals, deck). Roads count as walkable land, so bridges and causeways connect Galle Face to the Lotus Tower.
+- Done: bicycles, electric scooters, aircraft overhead.
+- Done: punching and knockdowns, tuk-tuk hits on people, mass-based crashes with traffic. Disabled near places of worship (section 9).
 - Done: protagonist matched to the owner's reference sheet: their portrait projected onto the head (public/textures/player-face.jpg, faded to skin at the edges), curly hair, navy palm-print camp shirt (canvas texture), khaki cargos, white trainers and a watch, as the default outfit.
 - Not done yet: zebra crossings, traffic lights, motorbike and car driving, riding a bus, passengers visible on trains, Main Line and Kelani Valley trains.
 - Simplification: vehicles stuck in a gridlock for 7 s pass through each other rather than reversing out.

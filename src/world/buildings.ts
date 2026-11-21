@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addLampLight } from './lamplight';
 import type { Building, CityData, Flat } from '../types';
 import { BUILDING_STYLES } from '../types';
 import { MeshBuilder, chunkedInstances } from './geom';
@@ -335,6 +336,7 @@ export function buildBuildings(city: CityData): BuildingMeshes {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += gLit;`);
   };
+  addLampLight(material);
 
   const group = new THREE.Group();
   group.name = 'buildings';

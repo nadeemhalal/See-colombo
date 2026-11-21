@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addLampLight } from '../world/lamplight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Pedestrians are single merged geometries drawn with InstancedMesh. Each vertex carries:
@@ -120,6 +121,7 @@ export function personMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
   m.onBeforeCompile = (s) => inject(s, true);
   m.customProgramCacheKey = () => 'pedestrian';
+  addLampLight(m);
   return m;
 }
 

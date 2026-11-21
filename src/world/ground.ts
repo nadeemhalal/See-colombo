@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addLampLight } from './lamplight';
 import type { CityData } from '../types';
 import { MeshBuilder, ribbon, dashes, flatPolygon } from './geom';
 import type { LandMask } from './landmask';
@@ -149,6 +150,8 @@ export function buildSurfaces(city: CityData): THREE.Group {
 
   const add = (mb: MeshBuilder, mat: THREE.Material, name: string) => {
     if (!mb.count) return;
+    // lamp light on everything you walk or drive on
+    if (mat instanceof THREE.MeshStandardMaterial && name !== 'canals' && name !== 'rails') addLampLight(mat);
     const m = new THREE.Mesh(mb.build(), mat);
     m.receiveShadow = true;
     m.name = name;

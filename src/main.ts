@@ -10,6 +10,7 @@ import { buildTrees } from './world/trees';
 import { buildLandmarks } from './world/landmarks';
 import { Environment } from './world/environment';
 import { StreetLights } from './world/streetlights';
+import { Planes } from './world/planes';
 import { Post } from './world/post';
 import { detectQuality, applyQuality, saveQuality } from './world/quality';
 import { setVehicleNight } from './traffic/models';
@@ -49,7 +50,10 @@ async function main() {
 
   setLoading('Mapping the coastline and Beira Lake…');
   await nextFrame();
-  const mask = buildLandMask(city.bounds, 2.5, city.coast, city.water, city.piers, city.land);
+  // roads are always walkable and drivable: this paints bridges over Beira Lake and the canals back
+  // as land (otherwise they are invisible walls) along with piers and breakwaters
+  const mask = buildLandMask(city.bounds, 2.5, city.coast, city.water,
+    city.piers.concat(city.roads.map((r) => ({ w: r.w + 1, p: r.p }))), city.land);
 
   const canvas = $('game') as HTMLCanvasElement;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
@@ -79,6 +83,8 @@ async function main() {
   scene.add(landmarks.group);
   const lamps = new StreetLights(city, mask, collision);
   scene.add(lamps.group);
+  const planes = new Planes();
+  scene.add(planes.group);
   let quality = detectQuality(renderer);
   const post = new Post(renderer, scene, camera, quality === 'low' ? 0 : 4);
   applyQuality(quality, renderer, post, env.sun);
@@ -225,15 +231,17 @@ async function main() {
     player.teleport(x, z, 0);
     collision.resolve(player.pos, 0.4, 0);
     bigmap.hide();
+    input.free = input.wantLock = true;
     input.lock();
   };
   bigmap.onTravel = travel;
 
-  // time of day: start late afternoon, 1 real second = 1 game minute
+  // time of day: start late afternoon; a whole game day lasts 10 real minutes (T for 10x faster)
   const today = new Date();
   const dayOfYear = Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(today.getFullYear(), 0, 0)) / 864e5);
   let minutes = 16 * 60 + 30;
-  let timeRate = 1;
+  const DAY_RATE = 1440 / 600; // game minutes per real second
+  let timeRate = DAY_RATE;
 
   // overlays
   const start = $('start');
@@ -241,15 +249,51 @@ async function main() {
   $('loading').classList.add('hidden');
   setTimeout(() => ($('loading').style.display = 'none'), 600);
   start.classList.add('show');
-  const resume = () => { sound.unlock(); if (!bigmap.open) input.lock(); };
+  // pause: Esc pauses and Esc resumes; any key (or a click) starts the game, so no clicking is needed
+  let started = false;
+  let paused = true;
+  let pausedAt = 0;
+  const setPaused = (p: boolean) => {
+    paused = p;
+    if (p) pausedAt = performance.now();
+    start.classList.toggle('show', p);
+    if (started) {
+      $('start-title').textContent = 'Paused';
+      $('start-sub').textContent = 'Press Esc to continue';
+    }
+    const playing = !p && !bigmap.open;
+    input.free = playing;
+    input.wantLock = playing;
+    if (playing) { sound.unlock(); input.lock(); }
+    else input.unlock();
+  };
+  let wasLocked = false;
+  const resume = () => { started = true; setPaused(false); };
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') {
+      if (!started || bigmap.open) return;
+      if (paused) { if (performance.now() - pausedAt > 250) setPaused(false); }
+      else setPaused(true);
+      return;
+    }
+    if (!started && !e.repeat) resume();
+  });
   trains.onHorn = (x, z, long) => sound.trainHorn(Math.max(0, 1 - Math.hypot(x - player.pos.x, z - player.pos.z) / 350), long);
   traffic.onHonk = (d) => sound.horn(Math.max(0, 1 - d / 40) * 0.7, 0.85 + Math.random() * 0.4);
   start.addEventListener('click', resume);
+  // left mouse also punches (F on the keyboard)
+  let punchQueued = false;
+  canvas.addEventListener('mousedown', (e) => { if (e.button === 0 && started && !paused) punchQueued = true; });
+  // places of worship are exploration only (PRD section 9): no fighting in or around them
+  const worship = ['redmosque', 'gangaramaya', 'seemamalaka']
+    .map((id) => city.landmarks.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => !!l);
+  const nearWorship = (x: number, z: number) => worship.some((l) => Math.hypot(l.x - x, l.z - z) < 120);
+  let punchCd = 0;
   document.addEventListener('pointerlockchange', () => {
+    // the browser releases the pointer itself when Esc is pressed: treat that as pausing
     const locked = document.pointerLockElement === canvas;
-    start.classList.toggle('show', !locked && !bigmap.open);
-    $('start-title').textContent = 'Paused';
-    $('start-sub').textContent = 'Click to continue';
+    if (!locked && started && !paused && !bigmap.open && wasLocked) setPaused(true);
+    wasLocked = locked;
   });
 
   // keep the drawing buffer in sync with the canvas size (also covers a page loaded while hidden)
@@ -273,13 +317,15 @@ async function main() {
 
   renderer.setAnimationLoop(() => {
     timer.update();
-    const dt = Math.min(timer.getDelta(), 0.05);
+    // while paused the world stands still: no time passes and key presses are ignored
+    if (paused) { input.clearFrame(); punchQueued = false; }
+    const dt = paused ? 0 : Math.min(timer.getDelta(), 0.05);
     const t = timer.getElapsed();
     fitCanvas();
 
     if (input.wasPressed('KeyM')) {
-      if (bigmap.open) { bigmap.hide(); input.lock(); }
-      else { bigmap.show(player.pos.x, player.pos.z, player.facing); input.unlock(); }
+      if (bigmap.open) { bigmap.hide(); input.free = input.wantLock = true; input.lock(); }
+      else { bigmap.show(player.pos.x, player.pos.z, player.facing); input.free = input.wantLock = false; input.unlock(); }
     }
     if (input.wasPressed('KeyH')) $('help').classList.toggle('show');
     if (input.wasPressed('KeyO')) {
@@ -298,7 +344,7 @@ async function main() {
       outfitBannerT = 2;
     }
     if (outfitBannerT > 0 && (outfitBannerT -= dt) <= 0) $('banner').classList.remove('show');
-    if (input.wasPressed('KeyT')) { timeRate = timeRate === 1 ? 20 : 1; $('clock').classList.toggle('fast', timeRate > 1); }
+    if (input.wasPressed('KeyT')) { timeRate = timeRate === DAY_RATE ? DAY_RATE * 10 : DAY_RATE; $('clock').classList.toggle('fast', timeRate > DAY_RATE); }
     if (input.wasPressed('BracketRight')) minutes += 60;
     if (input.wasPressed('BracketLeft')) minutes -= 60;
     if (input.wasPressed('KeyR')) { getOut(); leaveTrain(); spawnAt(); }
@@ -316,7 +362,7 @@ async function main() {
     }
     const nearTrain = !driving && !riding && player.pos.y < 1 ? trains.nearDoor(player.pos.x, player.pos.z) : null;
     const trainStopped = !!riding && Math.abs(riding.train.speed) < 0.3;
-    if (input.wasPressed('KeyE') && input.locked) {
+    if (input.wasPressed('KeyE') && !paused) {
       if (riding) { if (trainStopped) leaveTrain(); }
       else if (driving) { if (Math.abs(driving.speed) < 2.5) getOut(); }
       else if (nearTrain) boardTrain(nearTrain);
@@ -331,14 +377,36 @@ async function main() {
     for (const tk of parked) if (tk !== driving) tk.circles(others);
     const people = peds.circles();
 
-    if (!bigmap.open && input.locked) {
+    if (!bigmap.open && !paused) {
       if (driving) {
-        const impact = driving.drive(dt, input, collision, mask, traffic.circles(others.concat(people)));
-        if (impact > 2) sound.bump(impact);
+        // momentum: hitting traffic shoves it by mass, hitting people knocks them down
+        const sp = driving.speed, hx = Math.sin(driving.heading), hz = Math.cos(driving.heading);
+        const calm = nearWorship(driving.pos.x, driving.pos.z);
+        let hit = 0;
+        if (Math.abs(sp) > 2 && !calm) {
+          const fx = driving.pos.x + hx * Math.sign(sp) * 1.1, fz = driving.pos.z + hz * Math.sign(sp) * 1.1;
+          const ram = traffic.ram(fx, fz, 0.75, hx * sp, hz * sp, 0.45 + 0.08);
+          if (ram.impact > 0) { driving.speed *= 1 - ram.loss * 0.8; hit = Math.max(hit, ram.impact); }
+          const n = peds.hitAt(fx, fz, 0.8, driving.pos.x, driving.pos.z, Math.abs(sp) * 0.9);
+          if (n) { driving.speed *= Math.pow(0.88, n); hit = Math.max(hit, 3); }
+        }
+        // slow or near a place of worship: people and cars are solid as before
+        const solid = Math.abs(sp) > 2 && !calm ? others.slice() : others.concat(people);
+        const impact = driving.drive(dt, input, collision, mask, traffic.circles(solid));
+        if (Math.max(impact, hit) > 2) sound.bump(Math.max(impact, hit));
         if (input.wasPressed('KeyQ')) sound.horn(1);
         player.pos.set(driving.pos.x, 0, driving.pos.z);
       } else if (!riding) {
         player.update(dt, input, follow.yaw, traffic.circles(others.concat(people)));
+        punchCd = Math.max(0, punchCd - dt);
+        if ((input.wasPressed('KeyF') || punchQueued) && punchCd <= 0 && player.onGround && character.punch()) {
+          punchCd = 0.45;
+          if (!nearWorship(player.pos.x, player.pos.z)) {
+            const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
+            const n = peds.hitAt(player.pos.x + fx * 0.9, player.pos.z + fz * 0.9, 0.55, player.pos.x, player.pos.z, 3);
+            if (n) sound.bump(2.5);
+          }
+        }
       }
     }
     if (riding) {
@@ -385,6 +453,7 @@ async function main() {
     env.update(minutes, dayOfYear, player.pos, camera.position);
     buildings.setNight(env.night);
     lamps.update(dt, env.night, player.pos);
+    planes.update(dt, player.pos, env.night);
     setVehicleNight(THREE.MathUtils.smoothstep(env.night, 0.3, 0.8));
     post.update(env.night);
     if (driving && headlight.parent !== driving.group) { driving.group.add(headlight, headlight.target); }
@@ -404,13 +473,14 @@ async function main() {
 
     post.render();
     input.endFrame();
+    punchQueued = false;
 
     fpsN++; fpsT += dt;
     if (fpsT > 0.5) { $('fps').textContent = `${Math.round(fpsN / fpsT)} fps`; fpsN = 0; fpsT = 0; }
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {

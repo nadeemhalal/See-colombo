@@ -19,6 +19,8 @@ interface Ped {
   idleT: number;
   fleeT: number; fx: number; fz: number;
   scale: number;
+  /** knocked down: seconds left on the ground, fall progress 0..1, slide velocity */
+  downT: number; fall: number; vx: number; vz: number;
 }
 
 export interface Threat { x: number; z: number; heading: number; speed: number }
@@ -49,6 +51,8 @@ export class Pedestrians {
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private up = new THREE.Vector3(0, 1, 0);
+  private xAxis = new THREE.Vector3(1, 0, 0);
+  private qf = new THREE.Quaternion();
   private v = new THREE.Vector3();
   private sc = new THREE.Vector3();
 
@@ -69,7 +73,7 @@ export class Pedestrians {
         c.setHex(kid ? 0xf4f4f0 : pick(k.tops)).toArray(top, i * 3);
         c.setHex(kid ? (k.kind === 'dress' ? 0xf4f4f0 : 0x1f2a44) : pick(k.lowers)).toArray(lower, i * 3);
         this.peds.push({ mesh: ki, inst: i, edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
-          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, scale: kid ? 0.74 : 0.93 + rand() * 0.14 });
+          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, scale: kid ? 0.74 : 0.93 + rand() * 0.14 });
       }
       geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
       geo.setAttribute('aTop', new THREE.InstancedBufferAttribute(top, 3));
@@ -142,6 +146,29 @@ export class Pedestrians {
    * player: where the player (or their tuk-tuk) is; threat: the player's moving tuk-tuk, if any.
    * density: 0..1 share of people out on the streets (fewer at night).
    */
+  /**
+   * Knock down everyone within radius of (x,z), shoved away from (fromX,fromZ). force is the shove in
+   * m/s: a punch is about 3, a tuk-tuk at speed 8 or more. Returns how many were hit.
+   */
+  hitAt(x: number, z: number, radius: number, fromX: number, fromZ: number, force: number): number {
+    let n = 0;
+    for (const p of this.peds) {
+      if (p.edge < 0 || p.downT > 0) continue;
+      const dx = p.x - x, dz = p.z - z;
+      if (dx * dx + dz * dz > (radius + R) * (radius + R)) continue;
+      let ax = p.x - fromX, az = p.z - fromZ;
+      const d = Math.hypot(ax, az) || 1;
+      ax /= d; az /= d;
+      p.vx = ax * force; p.vz = az * force;
+      p.downT = 3 + Math.min(4, force * 0.4) + rand() * 1.5;
+      p.fall = 0;
+      p.heading = Math.atan2(-ax, -az); // falls on their back, facing the hit
+      p.fleeT = 0; p.idleT = 0; p.amp = 0;
+      n++;
+    }
+    return n;
+  }
+
   update(dt: number, player: THREE.Vector3, playerR: number, view: THREE.Vector3, threat: Threat | null, density = 1, solids: Circle[] = []) {
     const g = this.graph;
     const active = Math.round(COUNT * density);
@@ -163,6 +190,24 @@ export class Pedestrians {
       if (p.edge < 0 || Math.hypot(p.x - player.x, p.z - player.z) > DESPAWN) {
         this.spawn(p, player, SPAWN_MIN, SPAWN_MAX, view);
         if (p.edge < 0) return;
+      }
+
+      // knocked down: slide to a stop, lie there, get up and run from the player
+      if (p.downT > 0) {
+        const nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
+        if (!this.collision.pointBlocked(nx, 0.5, nz)) { p.x = nx; p.z = nz; } else { p.vx *= -0.3; p.vz *= -0.3; }
+        const f = Math.exp(-5 * dt);
+        p.vx *= f; p.vz *= f;
+        p.downT -= dt;
+        p.fall = p.downT > 0.8 ? Math.min(1, p.fall + dt * 4) : Math.max(0, p.downT / 0.8);
+        if (p.downT <= 0) {
+          p.fall = 0;
+          let ax = p.x - player.x, az = p.z - player.z;
+          const d = Math.hypot(ax, az) || 1;
+          p.fx = (ax / d) * 4.4; p.fz = (az / d) * 4.4;
+          p.fleeT = 2.5;
+        }
+        return;
       }
 
       // get out of the way of the player's tuk-tuk
@@ -275,7 +320,14 @@ export class Pedestrians {
         this.m4.makeScale(0, 0, 0);
       } else {
         this.q.setFromAxisAngle(this.up, p.heading);
-        this.m4.compose(this.v.set(p.x, PAVE_Y, p.z), this.q, this.sc.setScalar(p.scale));
+        let y = PAVE_Y;
+        if (p.fall > 0) {
+          // tip over backwards about the feet, eased
+          const e = p.fall * p.fall * (3 - 2 * p.fall);
+          this.q.multiply(this.qf.setFromAxisAngle(this.xAxis, -e * (Math.PI / 2 - 0.08)));
+          y += e * 0.12;
+        }
+        this.m4.compose(this.v.set(p.x, y, p.z), this.q, this.sc.setScalar(p.scale));
       }
       mesh.setMatrixAt(p.inst, this.m4);
       this.anim[p.mesh].setXY(p.inst, p.phase, p.amp);

@@ -89,14 +89,14 @@ export class Post {
   update(night: number) {
     // by day the bloom is barely visible, so skip the pass and save its cost
     this.bloom.enabled = night > 0.12;
-    this.bloom.strength = 0.07 + 0.73 * night;
-    this.bloom.threshold = 3.2 - 2.4 * night;
-    this.bloom.radius = 0.5 + 0.2 * night;
+    this.bloom.strength = 0.05 + 0.3 * night;
+    this.bloom.threshold = 3.2 - 1.6 * night;
+    this.bloom.radius = 0.35 + 0.1 * night;
     const u = this.grade.uniforms;
     u.uSat.value = 1.14 + 0.08 * night;
     (u.uWarm.value as THREE.Vector3).set(1.05, 1.0, 0.92).lerp(new THREE.Vector3(1.08, 0.98, 0.9), night);
     (u.uShadowTint.value as THREE.Vector3).set(1.0, 1.0, 1.02).lerp(new THREE.Vector3(0.9, 0.98, 1.12), night);
-    u.uVignette.value = 0.3 + 0.12 * night;
+    u.uVignette.value = 0.26 + 0.04 * night;
   }
 
   render() { this.composer.render(); }

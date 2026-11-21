@@ -22,10 +22,11 @@ export class FollowCamera {
    * back behind the vehicle a moment after you stop moving the mouse.
    */
   update(dt: number, input: Input, playerPos: THREE.Vector3, vehicle?: { heading: number; speed: number }) {
-    this.yaw -= input.mouseDX * this.sensitivity;
-    this.pitch += input.mouseDY * this.sensitivity * (this.invertY ? -1 : 1);
+    const look = input.lookAxis();
+    this.yaw -= input.mouseDX * this.sensitivity + look.yaw * 2.2 * dt;
+    this.pitch += (input.mouseDY * this.sensitivity + look.pitch * 1.2 * dt) * (this.invertY ? -1 : 1);
     this.pitch = THREE.MathUtils.clamp(this.pitch, -0.5, 1.25);
-    this.sinceMouse = input.mouseDX || input.mouseDY ? 0 : this.sinceMouse + dt;
+    this.sinceMouse = input.mouseDX || input.mouseDY || look.yaw || look.pitch ? 0 : this.sinceMouse + dt;
     if (input.wheel) {
       if (vehicle) this.driveDist = THREE.MathUtils.clamp(this.driveDist + input.wheel * 0.8, 3, 18);
       else this.dist = THREE.MathUtils.clamp(this.dist + input.wheel * 0.8, 1.8, 16);
