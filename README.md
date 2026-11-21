@@ -18,7 +18,7 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Ground detail: patched asphalt, concrete pavement slabs, raised kerbs, white edge lines on main roads, sunburnt grass and red laterite soil
 - Lighting: about 4,500 orange sodium street lamps along the roads, lighting the road, pavement, walls, cars and people beneath them through a city-wide light map (light in the world, not glare on the screen); tuk-tuk headlight and glowing head and tail lights on traffic at night; a starry night sky with city glow; a lifted dusk so the street stays readable; soft bloom and a warm colour grade
 - Rotating minimap with street names, full-screen map with click-to-fast-travel
-- Drivable tuk-tuks: one beside the spawn point and one parked on the kerb near most landmarks. Arcade handling, reverse, brake, body lean, horn
+- Drive anything: tuk-tuks are parked beside the spawn point and near most landmarks, and you can take any vehicle in traffic (car, van, bus, motorbike, bicycle, e-scooter). The driver climbs out and runs off; vehicles you leave stay where you left them. Each type has its own speed, acceleration, braking, turning circle and weight: a car does about 110 km/h, a bus is slow to start and wide in the turns, two-wheelers lean into corners, the bicycle has no engine noise, and you stand on the e-scooter. Taking vehicles is off near places of worship
 - Traffic on the real road network: tuk-tuks, cars, vans, red buses (main roads only), motorbikes, bicycles and electric scooters. Drives on the left, follows one-way streets, keeps a gap to the vehicle ahead, slows at junctions and honks if you block it
 - Pedestrians on the pavements: men in trousers or sarongs, women in sarees, school children in white uniforms. They walk, stop and stand by the road, cross side streets, step around you, and jump out of the way of your tuk-tuk. Traffic stops for them. Fewer people are out late at night
 - Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya and Kollupitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
@@ -68,7 +68,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | M | Map (drag, zoom, click to fast travel) |
 | T | Toggle fast time |
 | [ / ] | Back / forward one hour |
-| E | Get in / out of a tuk-tuk (when nearly stopped); board or leave a train when it is stopped |
+| Enter (or E) | Get in or out of a vehicle (when nearly stopped), take one from traffic; board or leave a train when it is stopped |
 | W / S | Throttle / brake and reverse (driving) |
 | A / D | Steer (driving) |
 | Space | Brake (driving) |
@@ -119,7 +119,7 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - Pedestrians use simple shapes and cross wherever their path takes them (no zebra crossings yet). They walk through trees and lamp posts.
 - No traffic lights. Vehicles stuck in a gridlock for 7 seconds pass through each other to clear it.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
-- Only tuk-tuks can be driven. Traffic vehicles can't be entered.
+- The character sits the same way in every vehicle (no separate pose for a car seat or handlebars), and there are no doors opening or exit animations.
 - On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
 - Lamp light is painted at about 2.5 m per pixel, so pools are soft rather than sharp-edged.
 - Buildings are still extruded footprints with shader detail. There are no balconies, verandah pillars or modelled shopfronts yet.

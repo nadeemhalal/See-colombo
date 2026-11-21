@@ -21,7 +21,7 @@ export class FollowCamera {
    * vehicle: when driving, pass the vehicle heading and speed; the camera swings
    * back behind the vehicle a moment after you stop moving the mouse.
    */
-  update(dt: number, input: Input, playerPos: THREE.Vector3, vehicle?: { heading: number; speed: number }) {
+  update(dt: number, input: Input, playerPos: THREE.Vector3, vehicle?: { heading: number; speed: number; size?: number }) {
     const look = input.lookAxis();
     this.yaw -= input.mouseDX * this.sensitivity + look.yaw * 2.2 * dt;
     this.pitch += (input.mouseDY * this.sensitivity + look.pitch * 1.2 * dt) * (this.invertY ? -1 : 1);
@@ -35,8 +35,9 @@ export class FollowCamera {
     let shoulder = 0.35, height = 1.55, dist = this.dist;
     if (vehicle) {
       shoulder = 0;
-      height = 1.7;
-      dist = this.driveDist;
+      // bigger vehicles: pull back and up so the whole thing is in view
+      height = 1.7 + (vehicle.size ?? 0) * 0.45;
+      dist = this.driveDist + (vehicle.size ?? 0) * 1.9;
       if (this.sinceMouse > 1.2 && Math.abs(vehicle.speed) > 1.5) {
         const behind = vehicle.heading + (vehicle.speed < 0 ? 0 : Math.PI);
         let d = behind - this.yaw;

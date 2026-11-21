@@ -124,16 +124,18 @@ export function bus(): Part {
 }
 
 /** Motorbike with a helmeted rider. */
-export function moto(): Part {
+export function moto(rider = true): Part {
   return merge([
     box(0.28, 0.35, 1.3, 0, 0.6, 0, WHITE),
     box(0.3, 0.12, 0.6, 0, 0.84, -0.2, SEAT),
     box(0.6, 0.04, 0.04, 0, 1.05, 0.55, CHROME),
     disc(0.07, 0, 0.85, 0.72, HEAD),
     wheel(0.3, 0.1, 0, 0.65), wheel(0.3, 0.1, 0, -0.65),
-    box(0.4, 0.55, 0.26, 0, 1.25, -0.12, 0x4a5568, 0.2), // rider torso
-    box(0.26, 0.26, 0.28, 0, 1.68, -0.05, 0x202020), // helmet
-    box(0.32, 0.18, 0.5, 0, 0.9, 0.05, 0x2f3542), // thighs
+    ...(rider ? [
+      box(0.4, 0.55, 0.26, 0, 1.25, -0.12, 0x4a5568, 0.2), // rider torso
+      box(0.26, 0.26, 0.28, 0, 1.68, -0.05, 0x202020), // helmet
+      box(0.32, 0.18, 0.5, 0, 0.9, 0.05, 0x2f3542), // thighs
+    ] : []),
   ]);
 }
 
@@ -146,7 +148,7 @@ const thinWheel = (r: number, z: number) => {
 const tube = (len: number, x: number, y: number, z: number, rx: number, hex: number) => box(0.04, 0.04, len, x, y, z, hex, rx);
 
 /** Pedal bicycle with a seated rider. The frame takes the body colour. */
-export function bicycle(): Part {
+export function bicycle(rider = true): Part {
   return merge([
     thinWheel(0.34, 0.52), thinWheel(0.34, -0.52),
     tube(0.75, 0, 0.62, 0.02, 0.15, WHITE), // top tube
@@ -155,30 +157,39 @@ export function bicycle(): Part {
     tube(0.5, 0, 0.6, 0.47, 1.3, WHITE), // fork
     box(0.5, 0.03, 0.03, 0, 0.95, 0.42, DARK), // handlebar
     box(0.14, 0.05, 0.24, 0, 0.88, -0.28, SEAT),
-    box(0.34, 0.52, 0.22, 0, 1.26, -0.12, 0xd9d4c8, 0.35), // rider shirt
-    box(0.2, 0.22, 0.22, 0, 1.66, 0.02, SKIN), // head
-    box(0.3, 0.16, 0.44, 0, 0.94, -0.12, 0x2f3542), // thighs
-    box(0.1, 0.42, 0.1, 0.1, 0.62, 0.02, 0x2f3542), box(0.1, 0.42, 0.1, -0.1, 0.62, -0.08, 0x2f3542), // shins
+    ...(rider ? [
+      box(0.34, 0.52, 0.22, 0, 1.26, -0.12, 0xd9d4c8, 0.35), // rider shirt
+      box(0.2, 0.22, 0.22, 0, 1.66, 0.02, SKIN), // head
+      box(0.3, 0.16, 0.44, 0, 0.94, -0.12, 0x2f3542), // thighs
+      box(0.1, 0.42, 0.1, 0.1, 0.62, 0.02, 0x2f3542), box(0.1, 0.42, 0.1, -0.1, 0.62, -0.08, 0x2f3542), // shins
+    ] : []),
   ]);
 }
 
 /** Electric kick scooter with a standing rider. The deck and stem take the body colour. */
-export function eScooter(): Part {
+export function eScooter(rider = true): Part {
   return merge([
     wheel(0.11, 0.06, 0, 0.42), wheel(0.11, 0.06, 0, -0.42),
     box(0.16, 0.06, 0.8, 0, 0.16, 0, WHITE), // deck
     tube(0.95, 0, 0.62, 0.42, 0.05, WHITE), // stem
     box(0.46, 0.03, 0.03, 0, 1.08, 0.44, DARK),
     disc(0.03, 0, 0.98, 0.46, HEAD), disc(0.025, 0, 0.3, -0.42, TAIL, true),
-    box(0.12, 0.8, 0.12, 0.08, 0.6, 0, 0x2f3542), box(0.12, 0.8, 0.12, -0.08, 0.6, -0.06, 0x2f3542), // legs
-    box(0.36, 0.55, 0.22, 0, 1.28, 0.02, 0x3c6e9c), // rider shirt
-    box(0.2, 0.22, 0.22, 0, 1.7, 0.04, SKIN), // head
+    ...(rider ? [
+      box(0.12, 0.8, 0.12, 0.08, 0.6, 0, 0x2f3542), box(0.12, 0.8, 0.12, -0.08, 0.6, -0.06, 0x2f3542), // legs
+      box(0.36, 0.55, 0.22, 0, 1.28, 0.02, 0x3c6e9c), // rider shirt
+      box(0.2, 0.22, 0.22, 0, 1.7, 0.04, SKIN), // head
+    ] : []),
   ]);
 }
 
 export interface VehicleType {
   name: string;
+  /** what the HUD calls it */
+  label: string;
+  /** with rider (traffic) */
   geo: () => Part;
+  /** without rider, for the player to drive (defaults to geo) */
+  bare?: () => Part;
   len: number;
   width: number;
   maxSpeed: number;
@@ -192,19 +203,19 @@ export interface VehicleType {
 }
 
 export const VEHICLE_TYPES: VehicleType[] = [
-  { name: 'tuktuk', geo: tukTuk, len: 2.6, width: 1.32, maxSpeed: 11, weight: 0.4, mass: 0.45,
+  { name: 'tuktuk', label: 'tuk-tuk', geo: tukTuk, len: 2.6, width: 1.32, maxSpeed: 11, weight: 0.4, mass: 0.45,
     colors: [0xb3201e, 0x1f7a3a, 0x1b4f9c, 0xe0b400, 0x5a1a1a, 0x1c1c1c, 0x3c8fd6, 0x7a1f6b] },
-  { name: 'car', geo: car, len: 4.3, width: 1.78, maxSpeed: 13, weight: 0.2, mass: 1.25,
+  { name: 'car', label: 'car', geo: car, len: 4.3, width: 1.78, maxSpeed: 13, weight: 0.2, mass: 1.25,
     colors: [0xf2f2f2, 0xb8bcc0, 0x1a1a1a, 0x5d6166, 0x8c1c1c, 0x1f3f75, 0xe8e2d0] },
-  { name: 'van', geo: van, len: 4.7, width: 1.78, maxSpeed: 12, weight: 0.13, mass: 1.8,
+  { name: 'van', label: 'van', geo: van, len: 4.7, width: 1.78, maxSpeed: 12, weight: 0.13, mass: 1.8,
     colors: [0xf5f5f2, 0xf5f5f2, 0xf5f5f2, 0xc0c3c6, 0xe7e0c8] },
-  { name: 'bus', geo: bus, len: 11, width: 2.5, maxSpeed: 10, weight: 0.07, majorOnly: true, mass: 11,
+  { name: 'bus', label: 'bus', geo: bus, len: 11, width: 2.5, maxSpeed: 10, weight: 0.07, majorOnly: true, mass: 11,
     colors: [0xb3201e, 0xb3201e, 0x2b6cb0, 0xe58e1a, 0x6b2fa0, 0x1f7a5c] },
-  { name: 'moto', geo: moto, len: 2.0, width: 0.8, maxSpeed: 13, weight: 0.17, mass: 0.22, twoWheel: true,
+  { name: 'moto', label: 'motorbike', geo: moto, bare: () => moto(false), len: 2.0, width: 0.8, maxSpeed: 13, weight: 0.17, mass: 0.22, twoWheel: true,
     colors: [0x9c1c1c, 0x1a1a1a, 0x1f4f9c, 0xb8bcc0, 0xd8d8d8] },
-  { name: 'bicycle', geo: bicycle, len: 1.75, width: 0.6, maxSpeed: 5, weight: 0.06, mass: 0.09, twoWheel: true,
+  { name: 'bicycle', label: 'bicycle', geo: bicycle, bare: () => bicycle(false), len: 1.75, width: 0.6, maxSpeed: 5, weight: 0.06, mass: 0.09, twoWheel: true,
     colors: [0x1a1a1a, 0x9c1c1c, 0x1f4f9c, 0x2f7a3a, 0xb8bcc0] },
-  { name: 'escooter', geo: eScooter, len: 1.2, width: 0.55, maxSpeed: 6.5, weight: 0.04, mass: 0.09, twoWheel: true,
+  { name: 'escooter', label: 'e-scooter', geo: eScooter, bare: () => eScooter(false), len: 1.2, width: 0.55, maxSpeed: 6.5, weight: 0.04, mass: 0.09, twoWheel: true,
     colors: [0x1a1a1a, 0x2a9d8f, 0xe0b400, 0xe76f51] },
 ];
 

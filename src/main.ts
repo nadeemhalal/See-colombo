@@ -13,7 +13,7 @@ import { StreetLights } from './world/streetlights';
 import { Planes } from './world/planes';
 import { Post } from './world/post';
 import { detectQuality, applyQuality, saveQuality } from './world/quality';
-import { setVehicleNight } from './traffic/models';
+import { setVehicleNight, VEHICLE_TYPES } from './traffic/models';
 import { Input } from './player/input';
 import { Character } from './player/character';
 import { PlayerController } from './player/controller';
@@ -23,8 +23,8 @@ import { Minimap } from './ui/minimap';
 import { BigMap } from './ui/bigmap';
 import { Hud } from './ui/hud';
 import { RoadGraph } from './traffic/roadGraph';
-import { Traffic, type Circle } from './traffic/traffic';
-import { TukTuk } from './player/vehicle';
+import { Traffic, type Agent, type Circle } from './traffic/traffic';
+import { TukTuk, Vehicle } from './player/vehicle';
 import { Pedestrians, streetDensity } from './people/pedestrians';
 import { Trains, type Door } from './trains/trains';
 import { Sound } from './audio';
@@ -132,7 +132,7 @@ async function main() {
   const sound = new Sound();
 
   const TUK_COLORS = [0xb3201e, 0x1f7a3a, 0x1b4f9c, 0xe0b400, 0x5a1a1a, 0x1c1c1c];
-  const parked: TukTuk[] = [];
+  const parked: Vehicle[] = [];
   const addParked = (x: number, z: number, heading: number) => {
     if (!isLand(mask, x, z) || collision.pointBlocked(x, 0.5, z)) return;
     const tk = new TukTuk(TUK_COLORS[parked.length % TUK_COLORS.length]);
@@ -176,7 +176,7 @@ async function main() {
     const off = e.w / 2 + 1.3; // on the kerb, left side
     addParked(n.x + e.dx * bestS + e.dz * off, n.z + e.dz * bestS - e.dx * off, Math.atan2(e.dx, e.dz));
   }
-  let driving: TukTuk | null = null;
+  let driving: Vehicle | null = null;
   let riding: Door | null = null;
   const doorV = new THREE.Vector3();
 
@@ -206,20 +206,44 @@ async function main() {
     const hx = Math.sin(v.heading), hz = Math.cos(v.heading);
     // step out on the left (kerb side), or the right if the left is blocked, else behind
     let placed = false;
+    const off = v.h.r + 0.65;
     for (const side of [1, -1]) {
-      const x = v.pos.x + hz * 1.3 * side, z = v.pos.z - hx * 1.3 * side;
+      const x = v.pos.x + hz * off * side, z = v.pos.z - hx * off * side;
       if (isLand(mask, x, z) && !collision.pointBlocked(x, 0.5, z)) { player.teleport(x, z); placed = true; break; }
     }
-    if (!placed) player.teleport(v.pos.x - hx * 2.2, v.pos.z - hz * 2.2);
+    if (!placed) player.teleport(v.pos.x - hx * (v.h.half + v.h.r + 0.7), v.pos.z - hz * (v.h.half + v.h.r + 0.7));
     player.facing = v.heading;
     v.speed = 0;
     driving = null;
     character.seated = false;
   };
-  const getIn = (v: TukTuk) => {
+  const getIn = (v: Vehicle) => {
     driving = v;
-    character.seated = true;
+    character.seated = !v.h.stand;
     player.vel.set(0, 0);
+  };
+  // take a vehicle out of traffic: the driver gets out and runs off, the vehicle is yours.
+  // Vehicles you leave behind stay where you left them (the oldest far-away ones are cleared up).
+  const MAX_TAKEN = 8;
+  const takeFromTraffic = (a: Agent) => {
+    const info = traffic.take(a);
+    const v = new Vehicle(info.type, info.color);
+    v.place(info.x, info.z, info.heading);
+    v.taken = true;
+    scene.add(v.group);
+    parked.push(v);
+    // the driver climbs out on the right (right-hand drive), riders hop off to the side
+    const side = v.h.leans ? 0.8 : v.h.r + 0.6;
+    const rx = -Math.cos(v.heading), rz = Math.sin(v.heading);
+    peds.dropAt(v.pos.x + rx * side, v.pos.z + rz * side, player.pos.x, player.pos.z);
+    const taken = parked.filter((p) => p.taken && p !== v);
+    if (taken.length >= MAX_TAKEN) {
+      const far = taken.sort((p, q) => q.pos.distanceTo(player.pos) - p.pos.distanceTo(player.pos))[0];
+      scene.remove(far.group);
+      (far.body.material as THREE.Material).dispose();
+      parked.splice(parked.indexOf(far), 1);
+    }
+    getIn(v);
   };
 
   spawnAt();
@@ -352,24 +376,30 @@ async function main() {
     minutes = ((minutes + dt * timeRate) % 1440 + 1440) % 1440;
 
     // get in / out of a tuk-tuk
-    let nearTuk: TukTuk | null = null;
-    if (!driving && !riding) {
-      let bd = 4.2;
+    let nearTuk: Vehicle | null = null;
+    let nearCar: Agent | null = null;
+    if (!driving && !riding && player.pos.y < 1) {
+      let bd = 1.8;
       for (const tk of parked) {
-        const d = Math.hypot(tk.pos.x - player.pos.x, tk.pos.z - player.pos.z);
-        if (d < bd && player.pos.y < 1) { bd = d; nearTuk = tk; }
+        const d = tk.distanceTo(player.pos.x, player.pos.z);
+        if (d < bd) { bd = d; nearTuk = tk; }
       }
+      if (!nearTuk && !nearWorship(player.pos.x, player.pos.z)) nearCar = traffic.nearest(player.pos.x, player.pos.z, 1.6);
     }
     const nearTrain = !driving && !riding && player.pos.y < 1 ? trains.nearDoor(player.pos.x, player.pos.z) : null;
     const trainStopped = !!riding && Math.abs(riding.train.speed) < 0.3;
-    if (input.wasPressed('KeyE') && !paused) {
+    const enterKey = input.wasPressed('Enter') || input.wasPressed('NumpadEnter') || input.wasPressed('KeyE');
+    if (enterKey && !paused) {
       if (riding) { if (trainStopped) leaveTrain(); }
-      else if (driving) { if (Math.abs(driving.speed) < 2.5) getOut(); }
+      else if (driving) { if (Math.abs(driving.speed) < (driving.h.leans ? 4 : 2.5)) getOut(); }
       else if (nearTrain) boardTrain(nearTrain);
       else if (nearTuk) getIn(nearTuk);
+      else if (nearCar) takeFromTraffic(nearCar);
     }
-    const promptText = nearTrain ? 'Board the train' : nearTuk ? 'Ride the tuk-tuk' : trainStopped ? 'Get off the train' : '';
-    if (promptText && $('prompt').dataset.t !== promptText) { $('prompt').innerHTML = `<b>E</b> ${promptText}`; $('prompt').dataset.t = promptText; }
+    const carLabel = nearCar ? VEHICLE_TYPES[nearCar.type].label : '';
+    const promptText = nearTrain ? 'Board the train' : nearTuk ? `Get on the ${nearTuk.type.label}`
+      : nearCar ? `Take the ${carLabel}` : trainStopped ? 'Get off the train' : '';
+    if (promptText && $('prompt').dataset.t !== promptText) { $('prompt').innerHTML = `<b>Enter</b> ${promptText}`; $('prompt').dataset.t = promptText; }
     $('prompt').classList.toggle('show', !!promptText && !bigmap.open);
 
     const others: Circle[] = trains.circles();
@@ -384,11 +414,12 @@ async function main() {
         const calm = nearWorship(driving.pos.x, driving.pos.z);
         let hit = 0;
         if (Math.abs(sp) > 2 && !calm) {
-          const fx = driving.pos.x + hx * Math.sign(sp) * 1.1, fz = driving.pos.z + hz * Math.sign(sp) * 1.1;
-          const ram = traffic.ram(fx, fz, 0.75, hx * sp, hz * sp, 0.45 + 0.08);
+          const reach = driving.h.half + driving.h.r * 0.5, rr = driving.h.r * 1.1;
+          const fx = driving.pos.x + hx * Math.sign(sp) * reach, fz = driving.pos.z + hz * Math.sign(sp) * reach;
+          const ram = traffic.ram(fx, fz, rr, hx * sp, hz * sp, driving.mass + 0.08);
           if (ram.impact > 0) { driving.speed *= 1 - ram.loss * 0.8; hit = Math.max(hit, ram.impact); }
-          const n = peds.hitAt(fx, fz, 0.8, driving.pos.x, driving.pos.z, Math.abs(sp) * 0.9);
-          if (n) { driving.speed *= Math.pow(0.88, n); hit = Math.max(hit, 3); }
+          const n = peds.hitAt(fx, fz, rr + 0.1, driving.pos.x, driving.pos.z, Math.abs(sp) * 0.9);
+          if (n) { driving.speed *= Math.pow(driving.mass > 1 ? 0.97 : driving.mass < 0.3 ? 0.6 : 0.88, n); hit = Math.max(hit, 3); }
         }
         // slow or near a place of worship: people and cars are solid as before
         const solid = Math.abs(sp) > 2 && !calm ? others.slice() : others.concat(people);
@@ -414,10 +445,10 @@ async function main() {
       player.pos.set(doorV.x, 0, doorV.z);
     }
     const ridePose = riding?.train.pose[riding.car];
-    const drivingState = driving ? { heading: driving.heading, speed: driving.speed }
+    const drivingState = driving ? { heading: driving.heading, speed: driving.speed, size: Math.max(0, driving.h.half - 0.75) }
       : riding && ridePose ? { heading: ridePose.h, speed: riding.train.speed } : undefined;
     if (!bigmap.open) follow.update(dt, input, driving ? driving.pos : riding ? doorV : player.pos, drivingState);
-    sound.engine(!!driving, driving?.speed ?? 0, driving && input.axis().f > 0 ? 1 : 0);
+    sound.engine(!!driving && driving.h.engine, driving?.speed ?? 0, driving && input.axis().f > 0 ? 1 : 0);
 
     if (driving) {
       character.root.position.copy(driving.seat());
@@ -439,13 +470,16 @@ async function main() {
       const info = tr.state === 'dwell' || tr.stopName === 'End of the map'
         ? `${tr.stopName} · E get off` : `Next: ${trains.nextStopName(tr)} · stops at every station`;
       $('drive-keys').textContent = info;
-    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · E get out';
+    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · Enter get out';
 
     camFwd.set(-Math.sin(follow.yaw), 0, -Math.cos(follow.yaw));
-    traffic.update(dt, driving ? driving.pos : player.pos, driving ? 1.3 : 0.45, camFwd, others.concat(people));
-    peds.update(dt, driving ? driving.pos : player.pos, driving ? 1.3 : 0.45, camFwd, driving && { x: driving.pos.x, z: driving.pos.z, heading: driving.heading, speed: driving.speed }, streetDensity(minutes / 60), others.slice(0, trainCount));
+    // the vehicle you're in is solid to traffic and people along its whole length (a bus is 11 m)
+    const mine = driving ? driving.circles() : [];
+    const myR = driving ? Math.min(driving.reach, 1.6) : 0.45;
+    traffic.update(dt, driving ? driving.pos : player.pos, myR, camFwd, others.concat(people, mine));
+    peds.update(dt, driving ? driving.pos : player.pos, myR, camFwd, driving && { x: driving.pos.x, z: driving.pos.z, heading: driving.heading, speed: driving.speed }, streetDensity(minutes / 60), others.slice(0, trainCount).concat(mine));
     // the trains watch for the player and cars on the line
-    const onLine: Circle[] = riding ? [] : [{ x: player.pos.x, z: player.pos.z, r: driving ? 1.3 : 0.45 }];
+    const onLine: Circle[] = riding ? [] : driving ? driving.circles() : [{ x: player.pos.x, z: player.pos.z, r: 0.45 }];
     traffic.circles(onLine);
     for (let i = trainCount; i < others.length; i++) onLine.push(others[i]);
     trains.update(dt, onLine);
@@ -456,7 +490,12 @@ async function main() {
     planes.update(dt, player.pos, env.night);
     setVehicleNight(THREE.MathUtils.smoothstep(env.night, 0.3, 0.8));
     post.update(env.night);
-    if (driving && headlight.parent !== driving.group) { driving.group.add(headlight, headlight.target); }
+    if (driving && headlight.parent !== driving.group) {
+      const front = driving.h.half + driving.h.r;
+      headlight.position.set(0, driving.h.leans ? 0.95 : 0.85, front);
+      headlight.target.position.set(0, 0, front + 14);
+      driving.group.add(headlight, headlight.target);
+    }
     if (!driving && headlight.parent) { headlight.parent.remove(headlight, headlight.target); }
     headlight.intensity = driving ? THREE.MathUtils.smoothstep(env.night, 0.3, 0.8) * 120 : 0;
     landmarks.update(t, env.night);
@@ -480,7 +519,7 @@ async function main() {
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, takeFromTraffic, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {

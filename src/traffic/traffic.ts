@@ -4,7 +4,7 @@ import { VEHICLE_TYPES, vehicleMaterial, type VehicleType } from './models';
 
 export interface Circle { x: number; z: number; r: number }
 
-interface Agent {
+export interface Agent {
   type: number;
   inst: number;
   edge: number;
@@ -125,6 +125,30 @@ export class Traffic {
       impact = Math.max(impact, closing);
     }
     return { loss, impact };
+  }
+
+  /** the traffic vehicle whose outline is nearest (x,z), within maxD metres */
+  nearest(x: number, z: number, maxD: number): Agent | null {
+    let best: Agent | null = null, bd = maxD;
+    for (const a of this.agents) {
+      if (a.edge < 0) continue;
+      const t = VEHICLE_TYPES[a.type];
+      const hx = Math.sin(a.heading), hz = Math.cos(a.heading), half = Math.max(0, t.len / 2 - t.width / 2);
+      const along = THREE.MathUtils.clamp((x - a.x) * hx + (z - a.z) * hz, -half, half);
+      const d = Math.max(0, Math.hypot(x - a.x - hx * along, z - a.z - hz * along) - t.width / 2);
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+  }
+
+  /** take a vehicle out of traffic for the player: returns its type, colour and pose; it respawns elsewhere later */
+  take(a: Agent) {
+    const c = new THREE.Color();
+    this.meshes[a.type].getColorAt(a.inst, c);
+    const out = { type: a.type, color: c.getHex(), x: a.x, z: a.z, heading: a.heading, speed: a.crashT > 0 ? 0 : a.speed };
+    a.edge = -1;
+    a.crashT = 0; a.tilt = 0; a.spin = 0; a.cvx = a.cvz = 0;
+    return out;
   }
 
   private place(a: Agent, edge: number, s: number, lane: number) {

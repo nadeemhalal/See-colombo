@@ -119,7 +119,7 @@ Tier 2 (later): Independence Memorial Hall, Town Hall, Viharamahadevi Park, Nati
 | Sprint | Shift | L3 / hold |
 | Jump | Space | A / Cross |
 | Crouch / walk slow | C / Ctrl | B / Circle |
-| Interact / enter vehicle | E | Y / Triangle |
+| Interact / enter vehicle | Enter or E | Y / Triangle |
 | Map | M | Back / Touchpad |
 | Pause / resume | Esc (any key starts; no click needed) | Start |
 
@@ -258,6 +258,7 @@ Because this is a real city with real communities, these need care before anythi
 - Done: street lamps light the world through a light map instead of screen glow; bloom reduced.
 - Done: Lotus Tower rebuilt (podium sized clear of the roads, ribbed shaft, petals, deck). Roads count as walkable land, so bridges and causeways connect Galle Face to the Lotus Tower.
 - Done: bicycles, electric scooters, aircraft overhead.
+- Done: every vehicle type can be driven: take any car, van, bus, motorbike, bicycle or e-scooter from traffic with Enter. Per-type handling and weight; vehicles left behind stay parked (up to 8).
 - Done: punching and knockdowns, tuk-tuk hits on people, mass-based crashes with traffic. Disabled near places of worship (section 9).
 - Done: protagonist matched to the owner's reference sheet: their portrait projected onto the head (public/textures/player-face.jpg, faded to skin at the edges), curly hair, navy palm-print camp shirt (canvas texture), khaki cargos, white trainers and a watch, as the default outfit.
 - Not done yet: zebra crossings, traffic lights, motorbike and car driving, riding a bus, passengers visible on trains, Main Line and Kelani Valley trains.

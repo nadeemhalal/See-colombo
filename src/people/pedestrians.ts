@@ -136,6 +136,38 @@ export class Pedestrians {
     p.edge = -1;
   }
 
+  /**
+   * Put someone at (x,z), e.g. a driver the player pulled out of their vehicle, running away from
+   * (fromX,fromZ). Reuses the person furthest from there. They join the nearest pavement afterwards.
+   */
+  dropAt(x: number, z: number, fromX: number, fromZ: number) {
+    let best: Ped | null = null, bd = -1;
+    for (const p of this.peds) {
+      if (p.edge < 0 || p.downT > 0) continue;
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d > bd) { bd = d; best = p; }
+    }
+    if (!best) return;
+    const g = this.graph;
+    let edge = -1, es = 0, ed = 1e9;
+    for (const id of g.edgesNear(x, z, 40)) {
+      const e = g.edges[id], n = g.nodes[e.a];
+      const s = THREE.MathUtils.clamp((x - n.x) * e.dx + (z - n.z) * e.dz, 0, e.len);
+      const d = Math.hypot(n.x + e.dx * s - x, n.z + e.dz * s - z);
+      if (d < ed) { ed = d; edge = id; es = s; }
+    }
+    if (edge < 0) return;
+    const p = best, e = g.edges[edge];
+    p.edge = edge; p.s = es; p.lat = 0;
+    p.side = ((x - g.nodes[e.a].x) * e.dz - (z - g.nodes[e.a].z) * e.dx) >= 0 ? 1 : -1;
+    p.x = x; p.z = z;
+    let ax = x - fromX, az = z - fromZ;
+    const d = Math.hypot(ax, az) || 1;
+    p.fx = (ax / d) * 4.4; p.fz = (az / d) * 4.4;
+    p.heading = Math.atan2(p.fx, p.fz);
+    p.fleeT = 3; p.idleT = 0; p.downT = 0; p.fall = 0;
+  }
+
   /** collision circles for the player and the traffic */
   circles(out: Circle[] = []): Circle[] {
     for (const p of this.peds) if (p.edge >= 0) out.push({ x: p.x, z: p.z, r: R * p.scale });
