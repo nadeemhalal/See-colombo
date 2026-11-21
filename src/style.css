@@ -57,6 +57,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1116; col
   border-radius: 20px; font-size: 15px; opacity: 0; transition: opacity 0.2s;
 }
 #prompt.show { opacity: 1; }
+#mousehint {
+  position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: var(--panel); padding: 6px 14px;
+  border-radius: 16px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+}
+#mousehint.show { opacity: 1; }
+#mousehint b { color: var(--accent); margin-right: 5px; }
 #prompt b { color: var(--accent); margin-right: 6px; }
 #speed {
   position: absolute; right: 22px; bottom: 34px; text-align: right; opacity: 0; transition: opacity 0.3s;

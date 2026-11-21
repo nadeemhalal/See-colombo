@@ -312,7 +312,13 @@ async function main() {
   start.addEventListener('click', resume);
   // left mouse also punches (F on the keyboard)
   let punchQueued = false;
-  canvas.addEventListener('mousedown', (e) => { if (e.button === 0 && started && !paused) punchQueued = true; });
+  // a click while the mouse isn't captured captures it (without the lock, turning stops when the
+  // cursor reaches the edge of the screen); otherwise it punches
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !started || paused || bigmap.open) return;
+    if (!input.locked) input.lock();
+    else punchQueued = true;
+  });
   // places of worship are exploration only (PRD section 9): no fighting in or around them
   const worship = ['redmosque', 'gangaramaya', 'seemamalaka', 'wolvendaal', 'stanthonys', 'stlucias', 'ponnambalavaneswaram', 'kathiresan', 'dewatagaha', 'sambodhi']
     .map((id) => city.landmarks.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => !!l);
@@ -406,6 +412,7 @@ async function main() {
       : nearCar ? `Take the ${carLabel}` : trainStopped ? 'Get off the train' : '';
     if (promptText && $('prompt').dataset.t !== promptText) { $('prompt').innerHTML = `<b>Enter</b> ${promptText}`; $('prompt').dataset.t = promptText; }
     $('prompt').classList.toggle('show', !!promptText && !bigmap.open);
+    $('mousehint').classList.toggle('show', started && !paused && !bigmap.open && !input.locked);
 
     const others: Circle[] = trains.circles();
     const trainCount = others.length;
