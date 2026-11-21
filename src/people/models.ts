@@ -172,7 +172,7 @@ function build(kid: boolean, low: boolean): THREE.BufferGeometry {
 
 const INJECT_DECL = /* glsl */ `
 attribute vec4 aPart;
-attribute vec4 aAnim; // phase, swing amplitude, upper-body bend, arm reach (10 + t: waving down a ride)
+attribute vec4 aAnim; // phase, swing amplitude, upper-body bend, arm reach (10 + t: waving down a ride; 20: seated)
 attribute vec4 aOpt;  // styles: lower, top, hair, head
 attribute vec4 aColA; // palette: skin, top, lower, hair
 attribute vec4 aColB; // palette: accent, shoes; figure (0 male .. 1 female); stoop
@@ -196,7 +196,19 @@ void pose(inout vec3 p, inout vec3 n) {
   }
   float ph = aAnim.x, amp = aAnim.y;
   float sw = sin(ph) * amp;
-  if (limb > 0.5 && limb < 2.5) {
+  bool sit = aAnim.w > 19.5;
+  if (sit) {
+    // seated: thighs forward, shins down, hands in the lap; skirts and shirt hems fold onto the lap
+    if (limb > 0.5 && limb < 2.5) {
+      if (joint > 0.5) { p = pRot(p, ${KNEE_Y.toFixed(3)}, 1.5); n = nRot(n, 1.5); }
+      p = pRot(p, ${HIP_Y.toFixed(3)}, -1.5); n = nRot(n, -1.5);
+    } else if (limb > 2.5) {
+      if (joint > 0.5) { p = pRot(p, ${ELBOW_Y.toFixed(3)}, -1.0); n = nRot(n, -1.0); }
+      p = pRot(p, ${SHOULDER_Y.toFixed(3)}, -0.3); n = nRot(n, -0.3);
+    } else if (p.y < ${(HIP_Y - 0.02).toFixed(3)}) {
+      p = pRot(p, ${HIP_Y.toFixed(3)}, -1.5); n = nRot(n, -1.5);
+    }
+  } else if (limb > 0.5 && limb < 2.5) {
     float dir = limb < 1.5 ? 1.0 : -1.0;
     // shorter steps in a sarong or long skirt
     float skirt = (aOpt.x > 1.5 && aOpt.x < 3.5) ? 0.65 : 1.0;

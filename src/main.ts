@@ -186,6 +186,7 @@ async function main() {
     addParked(n.x + e.dx * bestS + e.dz * off, n.z + e.dz * bestS - e.dx * off, Math.atan2(e.dx, e.dz));
   }
   let driving: Vehicle | null = null;
+  let jHeld = 0, jDone = false;
   let riding: Door | null = null;
   const doorV = new THREE.Vector3();
 
@@ -371,7 +372,14 @@ async function main() {
       else { bigmap.show(player.pos.x, player.pos.z, player.facing); input.free = input.wantLock = false; input.unlock(); }
     }
     if (input.wasPressed('KeyH')) $('help').classList.toggle('show');
-    if (input.wasPressed('KeyJ')) taxi.toggle();
+    // J: a tap skips the current fare, holding it turns taxi jobs on or off
+    if (input.isDown('KeyJ')) {
+      jHeld += dt;
+      if (jHeld >= 0.6 && !jDone) { taxi.toggle(); jDone = true; }
+    } else {
+      if (jHeld > 0 && !jDone) taxi.skip();
+      jHeld = 0; jDone = false;
+    }
     if (input.wasPressed('KeyO')) {
       const o = character.setOutfit(character.outfit + 1);
       try { localStorage.setItem('seeColombo.outfit', String(character.outfit)); } catch { /* storage blocked */ }
@@ -491,7 +499,7 @@ async function main() {
       const info = tr.state === 'dwell' || tr.stopName === 'End of the map'
         ? `${tr.stopName} · E get off` : `Next: ${trains.nextStopName(tr)} · stops at every station`;
       $('drive-keys').textContent = info;
-    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · Enter get out' + (driving.type.name === 'tuktuk' ? ` · J taxi jobs ${taxi.enabled ? 'on' : 'off'}` : '');
+    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · Enter get out' + (driving.type.name === 'tuktuk' ? (taxi.enabled ? ' · J skip fare (hold: jobs off)' : ' · hold J for taxi jobs') : '');
 
     camFwd.set(-Math.sin(follow.yaw), 0, -Math.cos(follow.yaw));
     // the vehicle you're in is solid to traffic and people along its whole length (a bus is 11 m)

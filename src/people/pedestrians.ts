@@ -37,6 +37,8 @@ interface Ped {
   followers: number[];
   /** taxi fare: 0 no, 1 waiting at the kerb waving, 2 riding in the player's tuk-tuk (not drawn) */
   fare: number;
+  /** while riding: height of the instance root so the hips rest on the tuk-tuk's bench */
+  sy: number;
 }
 
 export interface Threat { x: number; z: number; heading: number; speed: number }
@@ -56,6 +58,8 @@ interface Layer {
 }
 const SPAWN_MIN = 25, SPAWN_MAX = 170, DESPAWN = 210;
 const PAVE_Y = 0.04;
+/** hip height of the body model (models.ts HIP_Y), for seating */
+const SEAT_HIP = 0.9;
 const R = 0.3;
 const WALK_CLASSES = ['trunk', 'primary', 'secondary', 'tertiary', 'residential', 'service', 'footway'];
 const FOOTWAY = 7;
@@ -138,7 +142,7 @@ export class Pedestrians {
       g.forEach((m, j) => {
         const mesh = m.kid ? 1 : 0;
         const ped: Ped = { mesh, inst: perMesh[mesh].length, attrs: new Float32Array(13), edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
-          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0, fare: 0,
+          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0, fare: 0, sy: 0,
           scale: m.look.height / 1.73, girth: m.look.girth, speedMul: j === 0 ? slow : m.look.speed,
           gid: solo ? -1 : gi, leader: j === 0 ? -1 : leaderIdx, ox: m.ox, oz: m.oz, detached: false, followers: [] };
         if (j > 0) this.peds[leaderIdx].followers.push(this.peds.length);
@@ -355,10 +359,21 @@ export class Pedestrians {
     return { x: p.x, z: p.z, waiting: p.fare === 1 && p.edge >= 0 && p.downT <= 0 };
   }
 
-  /** the fare gets in: they disappear into the tuk-tuk */
+  /** the fare gets in: off the pavement, sitting in the tuk-tuk (placed by seatFare each frame) */
   boardFare(i: number) {
     const p = this.peds[i];
-    p.fare = 2; p.edge = -1; p.reach = 0;
+    p.fare = 2; p.edge = -1; p.amp = 0; p.bend = 0;
+    p.reach = 20; // the shader's seated pose
+  }
+
+  /** put a riding fare's hips on a seat whose top is at (x, seatY, z), facing `heading`; tall people
+   * sink into the cushion a little so their head stays under `ceiling` */
+  seatFare(i: number, x: number, seatY: number, z: number, heading: number, ceiling = Infinity) {
+    const p = this.peds[i];
+    if (p.fare !== 2) return;
+    p.x = x; p.z = z; p.heading = heading;
+    // seated, the top of the head is about 0.86 above the hips (body model units)
+    p.sy = Math.min(seatY + 0.04 - SEAT_HIP * p.scale, ceiling - (SEAT_HIP + 0.86) * p.scale);
   }
 
   /** the fare gets out at (x, z) and walks off, away from the tuk-tuk at (fromX, fromZ) */
@@ -633,10 +648,10 @@ export class Pedestrians {
     for (const ls of this.layers) for (const L of ls) { L.n = 0; L.dirty = false; }
     for (let i = 0; i < this.peds.length; i++) {
       const p = this.peds[i];
-      if (p.edge < 0) continue;
+      if (p.edge < 0 && p.fare !== 2) continue;
       {
         this.q.setFromAxisAngle(this.up, p.heading);
-        let y = PAVE_Y;
+        let y = p.fare === 2 ? p.sy : PAVE_Y;
         if (p.fall > 0) {
           // tip over backwards about the feet, eased
           const e = p.fall * p.fall * (3 - 2 * p.fall);

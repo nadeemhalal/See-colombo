@@ -39,6 +39,7 @@ export class Taxi {
   private pin: THREE.Group;
   private beam: THREE.Mesh;
   private toastT = 0;
+  private lastTuk: { x: number; z: number; heading: number } | null = null;
   private time = 0;
 
   constructor(private city: CityData, private peds: Pedestrians, private roads: RoadGraph, private onPaid: () => void = () => {}) {
@@ -56,22 +57,41 @@ export class Taxi {
     ball.position.y = 0.45;
     this.pin.add(cone, ball);
     this.pin.visible = false;
-    // a tall see-through column of light at the drop-off, visible over the rooftops
+    // a tall see-through column of light at the drop-off, visible over the rooftops and towers
     this.beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(5, 5, 160, 24, 1, true).translate(0, 80, 0),
-      new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, toneMapped: false, fog: false }),
+      new THREE.CylinderGeometry(5, 5, 400, 24, 1, true).translate(0, 200, 0), // taller than Fort's towers
+      new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, toneMapped: false, fog: false }),
     );
     this.beam.visible = false;
     this.group.add(this.pin, this.beam);
     this.showMoney();
   }
 
-  /** J: start or stop taking fares */
+  /** tap J: pass on the current fare (a passenger on board gets out, unpaid) */
+  skip() {
+    const s = this.state;
+    if (s.kind === 'pickup') {
+      this.peds.releaseFare(s.ped);
+      this.state = { kind: 'idle', wait: 6 };
+      $('job').classList.remove('show');
+      this.toast('Fare skipped. Someone else will wave you down soon.');
+    } else if (s.kind === 'ride') {
+      this.letOut(s.ped);
+      this.state = { kind: 'idle', wait: 8 };
+      $('job').classList.remove('show');
+      this.toast('You let your passenger out. No fare.');
+    } else if (s.kind === 'off') this.toast('Taxi jobs are off. Hold J to turn them on.');
+    else this.toast('No fare to skip. Hold J to stop taking fares.');
+  }
+
+  /** hold J: start or stop taking fares */
   toggle() {
     this.enabled = !this.enabled;
     try { localStorage.setItem(JOBS_KEY, this.enabled ? 'on' : 'off'); } catch { /* storage blocked */ }
     if (!this.enabled) {
-      this.cancel(this.state.kind === 'ride' ? 'You stopped taking fares. Your passenger got out without paying.' : 'Taxi jobs off. Press J to start again.');
+      const riding = this.state.kind === 'ride';
+      if (this.state.kind === 'ride') { this.letOut(this.state.ped); this.state = { kind: 'idle', wait: 0 }; }
+      this.cancel(riding ? 'You stopped taking fares. Your passenger got out without paying.' : 'Taxi jobs off. Hold J to start again.');
       this.state = { kind: 'off' };
     } else {
       this.state = { kind: 'idle', wait: 1 };
@@ -88,7 +108,19 @@ export class Taxi {
 
   /** the player got out of the tuk-tuk */
   leftVehicle() {
-    if (this.state.kind === 'ride') this.cancel('Your passenger got out. No fare.');
+    if (this.state.kind !== 'ride') return;
+    this.letOut(this.state.ped);
+    this.state = { kind: 'idle', wait: 8 };
+    $('job').classList.remove('show');
+    this.toast('Your passenger got out. No fare.');
+  }
+
+  /** the passenger steps out on the kerb side (left) of where the tuk-tuk last was */
+  private letOut(ped: number) {
+    const t = this.lastTuk;
+    if (!t) { this.peds.releaseFare(ped); return; }
+    const hx = Math.sin(t.heading), hz = Math.cos(t.heading);
+    this.peds.dropFare(ped, t.x + hz * 1.4, t.z - hx * 1.4, t.x, t.z);
   }
 
   /** markers for the minimap: where to go next */
@@ -107,6 +139,7 @@ export class Taxi {
     }
     const s = this.state;
     const tuk = ctx.tuk;
+    if (tuk) this.lastTuk = { x: tuk.x, z: tuk.z, heading: tuk.heading };
     this.pin.visible = s.kind === 'pickup';
     this.beam.visible = s.kind === 'ride';
 
@@ -133,7 +166,16 @@ export class Taxi {
       if (tuk && d < 6 && Math.abs(tuk.speed) < 1.5) this.board(s.ped, tuk);
     } else if (s.kind === 'ride') {
       s.t += dt;
-      if (tuk && Math.hypot(s.x - tuk.x, s.z - tuk.z) < 14 && Math.abs(tuk.speed) < 1.5) { this.arrive(s, tuk); return; }
+      // widen the beam with distance so it stays a few pixels wide from across the city
+      const far = Math.max(1, Math.hypot(s.x - ctx.px, s.z - ctx.pz) / 220);
+      this.beam.scale.set(far, 1, far);
+      // sitting on the back bench, on the left
+      if (tuk) {
+        const c = Math.cos(tuk.heading), sn = Math.sin(tuk.heading), lx = 0.22, lz = -0.7;
+        // bench top 0.92 + road 0.07; the canopy's underside is at about 1.87
+        this.peds.seatFare(s.ped, tuk.x + c * lx + sn * lz, 0.99, tuk.z - sn * lx + c * lz, tuk.heading, 1.85);
+      }
+      if (tuk && Math.hypot(s.x - tuk.x, s.z - tuk.z) < 14 && Math.abs(tuk.speed) < 1.5) { this.arrive(s); return; }
     }
     this.panel(ctx);
   }
@@ -158,7 +200,7 @@ export class Taxi {
     this.toast(`"${to.n}, please." Follow the yellow beam. Fare about Rs ${fareFor(dist * 1.35).toLocaleString()}.`);
   }
 
-  private arrive(s: Extract<State, { kind: 'ride' }>, tuk: { x: number; z: number; heading: number }) {
+  private arrive(s: Extract<State, { kind: 'ride' }>) {
     const fare = fareFor(s.dist * 1.35);
     // tip: up to 30% for beating the par time, less for every knock, nothing after a bad crash
     const quick = THREE.MathUtils.clamp((s.par - s.t) / (s.par * 0.4), 0, 1);
@@ -166,9 +208,7 @@ export class Taxi {
     const tip = Math.round((fare * 0.3 * quick * care) / 10) * 10;
     this.money += fare + tip;
     try { localStorage.setItem(MONEY_KEY, String(this.money)); } catch { /* storage blocked */ }
-    // they step out on the kerb side (left)
-    const hx = Math.sin(tuk.heading), hz = Math.cos(tuk.heading);
-    this.peds.dropFare(s.ped, tuk.x + hz * 1.4, tuk.z - hx * 1.4, tuk.x, tuk.z);
+    this.letOut(s.ped);
     const verdict = s.worst > 7 ? 'That crash scared them: no tip.'
       : s.knocks === 0 && quick > 0 ? 'Smooth and quick. Thank you!'
       : s.knocks > 2 ? 'A bumpy ride.'
