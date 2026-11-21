@@ -235,8 +235,8 @@ export const vehicleMaterial = () => {
       .replace('#include <common>', `#include <common>
         uniform float uNight; varying float vGlow;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        if (vGlow > 0.5 && vGlow < 1.5) totalEmissiveRadiance += vec3(1.0, 0.92, 0.75) * (0.15 + 3.5 * uNight);
-        else if (vGlow > 1.5) totalEmissiveRadiance += vec3(1.0, 0.06, 0.03) * (0.05 + 2.2 * uNight);`);
+        if (vGlow > 0.5 && vGlow < 1.5) totalEmissiveRadiance += vec3(1.0, 0.92, 0.75) * (0.1 + 1.3 * uNight);
+        else if (vGlow > 1.5) totalEmissiveRadiance += vec3(1.0, 0.06, 0.03) * (0.04 + 1.1 * uNight);`);
   };
   m.customProgramCacheKey = () => 'vehicle-glow';
   addLampLight(m);

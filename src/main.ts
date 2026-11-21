@@ -89,7 +89,7 @@ async function main() {
   const post = new Post(renderer, scene, camera, quality === 'low' ? 0 : 4);
   applyQuality(quality, renderer, post, env.sun);
   // the player's tuk-tuk headlight
-  const headlight = new THREE.SpotLight(0xfff0d0, 0, 45, 0.55, 0.6, 1.4);
+  const headlight = new THREE.SpotLight(0xfff0d0, 0, 40, 0.5, 0.7, 1.5);
   headlight.position.set(0, 1.05, 1.3);
   headlight.target.position.set(0, 0, 14);
 
@@ -497,7 +497,8 @@ async function main() {
       driving.group.add(headlight, headlight.target);
     }
     if (!driving && headlight.parent) { headlight.parent.remove(headlight, headlight.target); }
-    headlight.intensity = driving ? THREE.MathUtils.smoothstep(env.night, 0.3, 0.8) * 120 : 0;
+    // a soft beam: enough to see the road ahead without washing out whatever is next to you
+    headlight.intensity = driving ? THREE.MathUtils.smoothstep(env.night, 0.3, 0.8) * (driving.h.leans ? 5 : driving.h.half > 2 ? 16 : 12) : 0;
     landmarks.update(t, env.night);
     water.uniforms.uTime.value = t;
     water.uniforms.uSunDir.value.copy(env.sunDir);

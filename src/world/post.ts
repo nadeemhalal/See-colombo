@@ -89,9 +89,10 @@ export class Post {
   update(night: number) {
     // by day the bloom is barely visible, so skip the pass and save its cost
     this.bloom.enabled = night > 0.12;
-    this.bloom.strength = 0.05 + 0.3 * night;
-    this.bloom.threshold = 3.2 - 1.6 * night;
-    this.bloom.radius = 0.35 + 0.1 * night;
+    // only real light sources (lamp heads, lit signs) should glow, not lit walls or vehicles
+    this.bloom.strength = 0.04 + 0.16 * night;
+    this.bloom.threshold = 3.4 - 0.9 * night;
+    this.bloom.radius = 0.3;
     const u = this.grade.uniforms;
     u.uSat.value = 1.14 + 0.08 * night;
     (u.uWarm.value as THREE.Vector3).set(1.05, 1.0, 0.92).lerp(new THREE.Vector3(1.08, 0.98, 0.9), night);

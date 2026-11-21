@@ -89,7 +89,9 @@ export function addLampLight<T extends THREE.MeshStandardMaterial>(mat: T, stren
           // light comes from heads about 7 m up: strongest on the ground, fading up the walls
           lamp *= 1.0 - smoothstep(3.0, 11.0, vLampW.y);
           lamp *= 0.55 + 0.45 * max(dot(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), 0.0);
-          reflectedLight.directDiffuse += material.diffuseColor * uLampColor * lamp * uLampOn * ${(5.0 * strength).toFixed(2)};
+          // dark asphalt needs the full boost to read; pale walls and white vehicles get less so they don't glare
+          float albedo = dot(material.diffuseColor, vec3(0.2126, 0.7152, 0.0722));
+          reflectedLight.directDiffuse += material.diffuseColor * uLampColor * lamp * uLampOn * ${(5.0 * strength).toFixed(2)} * (1.0 - 0.65 * smoothstep(0.08, 0.7, albedo));
         }`);
   };
   mat.customProgramCacheKey = () => (prevKey ? prevKey() : prevSrc) + '|lamp';
