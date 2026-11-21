@@ -86,7 +86,7 @@ export const SKIN_TONES = [0x5c3b27, 0x6e4630, 0x7c5136, 0x8a5a3c, 0x9a6a48, 0x6
 const INJECT_DECL = /* glsl */ `
 attribute float aSlot;
 attribute float aLimb;
-attribute vec2 aAnim;
+attribute vec4 aAnim; // phase, swing amplitude, torso bend about the hips, arm reach
 attribute vec3 aSkin;
 attribute vec3 aTop;
 attribute vec3 aLower;
@@ -104,6 +104,20 @@ const INJECT_POSE = /* glsl */ `
     float c = cos(ang), s = sin(ang);
     float y = transformed.y - piv, z = transformed.z;
     transformed.y = piv + y * c - z * s;
+    transformed.z = y * s + z * c;
+  }
+  // arms reach forward (getting up: hands to the knees, pushing off the ground)
+  if (aLimb > 2.5 && aAnim.w != 0.0) {
+    float c = cos(-aAnim.w), s = sin(-aAnim.w);
+    float y = transformed.y - ${SHOULDER_Y.toFixed(2)}, z = transformed.z;
+    transformed.y = ${SHOULDER_Y.toFixed(2)} + y * c - z * s;
+    transformed.z = y * s + z * c;
+  }
+  // bend the upper body (torso, head, arms) about the hips, for sitting up and rising
+  if (aAnim.z != 0.0 && (aLimb > 2.5 || (aLimb < 0.5 && transformed.y > ${(HIP_Y - 0.05).toFixed(2)}))) {
+    float c = cos(aAnim.z), s = sin(aAnim.z);
+    float y = transformed.y - ${HIP_Y.toFixed(2)}, z = transformed.z;
+    transformed.y = ${HIP_Y.toFixed(2)} + y * c - z * s;
     transformed.z = y * s + z * c;
   }
 }

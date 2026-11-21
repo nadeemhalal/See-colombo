@@ -69,6 +69,18 @@ export function buildTrees(city: CityData, collision: Collision): THREE.Group {
     frond: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide }),
     leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
   };
+  // leaves and fronds right next to the camera dissolve (dithered), so walking under a tree doesn't
+  // fill the screen with green. Set before addLampLight, which keeps it and provides vLampW.
+  for (const m of [mats.frond, mats.leaf]) {
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        {
+          float camD = distance(vLampW, cameraPosition);
+          float dith = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+          if (camD < 4.0 && dith > (camD - 1.2) / 2.8) discard;
+        }`);
+    };
+  }
   for (const m of Object.values(mats)) addLampLight(m, 0.7);
 
   const byChunk = new Map<string, number[]>();

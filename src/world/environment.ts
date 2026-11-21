@@ -69,6 +69,10 @@ export class Environment {
   nightSky = nightSkyDome();
   sky = new Sky();
   sun = new THREE.DirectionalLight(0xffffff, 3);
+  private tmpL = new THREE.Vector3();
+  private tmpR = new THREE.Vector3();
+  private tmpU = new THREE.Vector3();
+  private tmpP = new THREE.Vector3();
   hemi = new THREE.HemisphereLight(0xbfd6ee, 0x6b5f4a, 0.8);
   fog = new THREE.FogExp2(0xcdd6dc, 0.00028);
   sunDir = new THREE.Vector3(0, 1, 0);
@@ -140,12 +144,30 @@ export class Environment {
     // moonlight is bright enough to read the street by
     this.sun.intensity = el > -0.05 ? 2.55 * day : 0.8;
 
-    // snap the shadow camera to texels to avoid shimmering
-    const texel = 280 / 2048;
-    const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
-    this.sun.target.position.set(fx, 0, fz);
-    this.sun.position.set(fx + lightDir.x * 600, lightDir.y * 600, fz + lightDir.z * 600);
+    // centre the shadow box a little ahead of the camera, so more of what you see is covered
+    const sc = this.sun.shadow.camera;
+    let ax = focus.x, az = focus.z;
+    if (camPos) {
+      const vx = focus.x - camPos.x, vz = focus.z - camPos.z, vl = Math.hypot(vx, vz);
+      if (vl > 0.5) { ax += (vx / vl) * 45; az += (vz / vl) * 45; }
+    }
+    // snap the box to whole shadow-map texels in the light's own frame (not world x/z), otherwise
+    // shadow edges crawl and flicker as you move
+    const texel = (sc.right - sc.left) / this.sun.shadow.mapSize.x;
+    const L = this.tmpL.copy(lightDir).normalize();
+    const right = this.tmpR.set(0, 1, 0).cross(L);
+    if (right.lengthSq() < 1e-6) right.set(1, 0, 0); else right.normalize();
+    const upv = this.tmpU.copy(L).cross(right);
+    const a = Math.round((ax * right.x + az * right.z) / texel) * texel;
+    const b = Math.round((ax * upv.x + az * upv.z) / texel) * texel;
+    const d = ax * L.x + az * L.z;
+    const p = this.tmpP.copy(right).multiplyScalar(a).addScaledVector(upv, b).addScaledVector(L, d);
+    this.sun.target.position.copy(p);
+    this.sun.position.copy(p).addScaledVector(L, 600);
     this.sun.target.updateMatrixWorld();
+    // push shadow lookups out along the surface normal by about a texel (more when the sun is low),
+    // which stops stripes ("shadow acne") on the ground with the coarser Low-quality shadow map
+    this.sun.shadow.normalBias = texel * (0.9 + 0.8 * low);
 
     // at night: blue-violet sky light from above, warm street-lamp bounce from below
     // twilight: the sun is down but the lamps and night sky light are not yet up, so lift the fill

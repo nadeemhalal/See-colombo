@@ -21,6 +21,10 @@ interface Ped {
   scale: number;
   /** knocked down: seconds left on the ground, fall progress 0..1, slide velocity */
   downT: number; fall: number; vx: number; vz: number;
+  /** running away along the pavements (seconds left) */
+  runT: number;
+  /** pose for the shader: upper-body bend about the hips and arm reach (radians) */
+  bend: number; reach: number;
 }
 
 export interface Threat { x: number; z: number; heading: number; speed: number }
@@ -73,12 +77,12 @@ export class Pedestrians {
         c.setHex(kid ? 0xf4f4f0 : pick(k.tops)).toArray(top, i * 3);
         c.setHex(kid ? (k.kind === 'dress' ? 0xf4f4f0 : 0x1f2a44) : pick(k.lowers)).toArray(lower, i * 3);
         this.peds.push({ mesh: ki, inst: i, edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
-          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, scale: kid ? 0.74 : 0.93 + rand() * 0.14 });
+          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0, scale: kid ? 0.74 : 0.93 + rand() * 0.14 });
       }
       geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
       geo.setAttribute('aTop', new THREE.InstancedBufferAttribute(top, 3));
       geo.setAttribute('aLower', new THREE.InstancedBufferAttribute(lower, 3));
-      const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2);
+      const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
       anim.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aAnim', anim);
       const mesh = new THREE.InstancedMesh(geo, mat, n);
@@ -148,24 +152,39 @@ export class Pedestrians {
       if (d > bd) { bd = d; best = p; }
     }
     if (!best) return;
+    const p = best;
+    p.x = x; p.z = z;
+    p.heading = Math.atan2(x - fromX, z - fromZ);
+    p.fleeT = 0; p.idleT = 0; p.downT = 0; p.fall = 0; p.bend = 0; p.reach = 0;
+    if (!this.reattach(p, fromX, fromZ)) { p.edge = -1; return; }
+    p.runT = 7;
+  }
+
+  /**
+   * Join the nearest pavement from wherever the person is now, heading away from (fromX,fromZ).
+   * Used after being knocked down, dodging or fleeing, so they carry on from where they are
+   * instead of being pulled back to the spot on the pavement they had before.
+   */
+  private reattach(p: Ped, fromX: number, fromZ: number): boolean {
     const g = this.graph;
     let edge = -1, es = 0, ed = 1e9;
-    for (const id of g.edgesNear(x, z, 40)) {
+    for (const id of g.edgesNear(p.x, p.z, 45)) {
       const e = g.edges[id], n = g.nodes[e.a];
-      const s = THREE.MathUtils.clamp((x - n.x) * e.dx + (z - n.z) * e.dz, 0, e.len);
-      const d = Math.hypot(n.x + e.dx * s - x, n.z + e.dz * s - z);
-      if (d < ed) { ed = d; edge = id; es = s; }
+      const s = THREE.MathUtils.clamp((p.x - n.x) * e.dx + (p.z - n.z) * e.dz, 0, e.len);
+      const d = Math.hypot(n.x + e.dx * s - p.x, n.z + e.dz * s - p.z);
+      if (d < ed - 0.01) { ed = d; edge = id; es = s; }
     }
-    if (edge < 0) return;
-    const p = best, e = g.edges[edge];
+    if (edge < 0) return false;
+    let e = g.edges[edge];
+    // face away from the threat: take the same street the other way if this one leads towards it
+    if (e.dx * (p.x - fromX) + e.dz * (p.z - fromZ) < 0) {
+      const back = g.nodes[e.b].out.find((id) => g.edges[id].b === e.a);
+      if (back !== undefined) { edge = back; es = g.edges[back].len - es; e = g.edges[back]; }
+    }
+    const n = g.nodes[e.a];
     p.edge = edge; p.s = es; p.lat = 0;
-    p.side = ((x - g.nodes[e.a].x) * e.dz - (z - g.nodes[e.a].z) * e.dx) >= 0 ? 1 : -1;
-    p.x = x; p.z = z;
-    let ax = x - fromX, az = z - fromZ;
-    const d = Math.hypot(ax, az) || 1;
-    p.fx = (ax / d) * 4.4; p.fz = (az / d) * 4.4;
-    p.heading = Math.atan2(p.fx, p.fz);
-    p.fleeT = 3; p.idleT = 0; p.downT = 0; p.fall = 0;
+    p.side = ((p.x - n.x) * e.dz - (p.z - n.z) * e.dx) >= 0 ? 1 : -1;
+    return true;
   }
 
   /** collision circles for the player and the traffic */
@@ -231,13 +250,34 @@ export class Pedestrians {
         const f = Math.exp(-5 * dt);
         p.vx *= f; p.vz *= f;
         p.downT -= dt;
-        p.fall = p.downT > 0.8 ? Math.min(1, p.fall + dt * 4) : Math.max(0, p.downT / 0.8);
+        // lie there, sit up (hands to knees), then rise onto the feet with the body kept upright and
+        // leaning forward to push off, instead of swinging up stiff from the heels
+        const A = Math.PI / 2 - 0.08, SIT = 1.7, RISE = 0.85;
+        const sm = (x: number) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+        if (p.downT > SIT) {
+          p.fall = Math.min(1, p.fall + dt * 4);
+          p.bend = 0;
+          p.reach = 0.5 * p.fall;
+        } else if (p.downT > RISE) {
+          const k = sm((SIT - p.downT) / (SIT - RISE));
+          p.fall = 1;
+          p.bend = k * (A + 0.35);
+          p.reach = 0.5 + 0.7 * k;
+        } else {
+          const k = sm(1 - p.downT / RISE);
+          p.fall = 1 - k;
+          const e = p.fall * p.fall * (3 - 2 * p.fall);
+          p.bend = e * A + 0.35 * (1 - k) + 0.25 * Math.sin(Math.PI * k);
+          p.reach = 1.2 * (1 - k);
+        }
         if (p.downT <= 0) {
-          p.fall = 0;
-          let ax = p.x - player.x, az = p.z - player.z;
-          const d = Math.hypot(ax, az) || 1;
-          p.fx = (ax / d) * 4.4; p.fz = (az / d) * 4.4;
-          p.fleeT = 2.5;
+          p.fall = 0; p.bend = 0; p.reach = 0;
+          // run off along the pavements, away from the player
+          if (this.reattach(p, player.x, player.z)) p.runT = 6 + rand() * 3;
+          else {
+            const ax = p.x - player.x, az = p.z - player.z, d = Math.hypot(ax, az) || 1;
+            p.fx = (ax / d) * 4.2; p.fz = (az / d) * 4.2; p.fleeT = 2;
+          }
         }
         return;
       }
@@ -262,8 +302,12 @@ export class Pedestrians {
         p.fleeT -= dt;
         const nx = p.x + p.fx * dt, nz = p.z + p.fz * dt;
         if (!this.collision.pointBlocked(nx, 0.5, nz)) { p.x = nx; p.z = nz; }
-        p.heading = Math.atan2(p.fx, p.fz);
+        let dh = Math.atan2(p.fx, p.fz) - p.heading;
+        dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        p.heading += dh * Math.min(1, 10 * dt);
         moving = 4.2;
+        // carry on from here when done, rather than being pulled back to the old spot
+        if (p.fleeT <= 0) this.reattach(p, p.x - p.fx, p.z - p.fz);
       } else if (p.idleT > 0) {
         p.idleT -= dt;
         // stand facing the road
@@ -278,12 +322,27 @@ export class Pedestrians {
         const hx = Math.sin(p.heading), hz = Math.cos(p.heading);
         const ahead = pdx * hx + pdz * hz;
         const blocked = ahead > 0 && ahead < playerR + 0.9 && Math.abs(pdx * hz - pdz * hx) < playerR + 0.35;
-        const sp = blocked ? 0 : p.speed;
+        const running = p.runT > 0;
+        if (running) p.runT -= dt;
+        const sp = blocked && !running ? 0 : running ? 4.0 * Math.min(1, 0.4 + p.runT) : p.speed;
         p.s += sp * dt;
         moving = sp;
         let guard = 0;
         while (p.s > g.edges[p.edge].len && guard++ < 6) {
           p.s -= g.edges[p.edge].len;
+          if (running) {
+            // at a junction, take whichever way leads furthest from the player
+            let bestE = -1, bestD = -1;
+            for (let k = 0; k < 3; k++) {
+              const c = g.next(p.edge, rand);
+              if (c < 0) continue;
+              const nb = g.nodes[g.edges[c].b], dd = Math.hypot(nb.x - player.x, nb.z - player.z);
+              if (dd > bestD) { bestD = dd; bestE = c; }
+            }
+            if (bestE < 0) { p.edge = -1; break; }
+            p.edge = bestE;
+            continue;
+          }
           if (rand() < 0.08) {
             // turn back the way we came, staying on the same pavement
             const back = g.nodes[g.edges[p.edge].b].out.find((id) => g.edges[id].b === g.edges[p.edge].a);
@@ -362,7 +421,7 @@ export class Pedestrians {
         this.m4.compose(this.v.set(p.x, y, p.z), this.q, this.sc.setScalar(p.scale));
       }
       mesh.setMatrixAt(p.inst, this.m4);
-      this.anim[p.mesh].setXY(p.inst, p.phase, p.amp);
+      this.anim[p.mesh].setXYZW(p.inst, p.phase, p.amp, p.bend, p.reach);
     }
     for (let i = 0; i < this.meshes.length; i++) {
       this.meshes[i].instanceMatrix.needsUpdate = true;

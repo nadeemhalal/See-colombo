@@ -106,7 +106,7 @@ export function buildBuildings(city: CityData): BuildingMeshes {
   };
 
   // which buildings belong to which chunk (by centroid)
-  interface Chunk { key: string; cx: number; cz: number; ids: number[]; detail: THREE.Object3D[] | null; lod: THREE.InstancedMesh | null }
+  interface Chunk { key: string; cx: number; cz: number; ids: number[]; detail: THREE.Object3D[] | null; lod: THREE.InstancedMesh | null; lodStart: number; lodSaved: Float32Array | null }
   const chunkMap = new Map<string, Chunk>();
   city.buildings.forEach((b, i) => {
     const n = b.p.length / 2;
@@ -115,7 +115,7 @@ export function buildBuildings(city: CityData): BuildingMeshes {
     x /= n; z /= n;
     const gx = Math.floor(x / CHUNK), gz = Math.floor(z / CHUNK), key = `${gx},${gz}`;
     let c = chunkMap.get(key);
-    if (!c) chunkMap.set(key, (c = { key, cx: (gx + 0.5) * CHUNK, cz: (gz + 0.5) * CHUNK, ids: [], detail: null, lod: null }));
+    if (!c) chunkMap.set(key, (c = { key, cx: (gx + 0.5) * CHUNK, cz: (gz + 0.5) * CHUNK, ids: [], detail: null, lod: null, lodStart: 0, lodSaved: null }));
     c.ids.push(i);
   });
 
@@ -688,9 +688,24 @@ export function buildBuildings(city: CityData): BuildingMeshes {
   const lodGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   const lodCol = new THREE.Color();
+  // one instanced mesh per 1 km region (16 chunks) instead of one per chunk: about 70 draw calls for
+  // the whole city instead of over 1,000. Each chunk owns a slice of its region's instances.
+  const regions = new Map<string, Chunk[]>();
   for (const c of chunkMap.values()) {
-    const mesh = new THREE.InstancedMesh(lodGeo, lodMat, c.ids.length);
-    c.ids.forEach((bi, n) => {
+    const k = `${Math.floor(c.cx / (CHUNK * 4))},${Math.floor(c.cz / (CHUNK * 4))}`;
+    let a = regions.get(k);
+    if (!a) regions.set(k, (a = []));
+    a.push(c);
+  }
+  for (const list of regions.values()) {
+    const total = list.reduce((n, c) => n + c.ids.length, 0);
+    const mesh = new THREE.InstancedMesh(lodGeo, lodMat, total);
+    let base = 0;
+    for (const c of list) {
+    c.lod = mesh;
+    c.lodStart = base;
+    c.ids.forEach((bi, k) => {
+      const n = base + k;
       const b = city.buildings[bi];
       const np = b.p.length / 2;
       // oriented to the longest wall, sized to the footprint's extent along and across it
@@ -717,12 +732,30 @@ export function buildBuildings(city: CityData): BuildingMeshes {
       lodCol.setHex(pal[Math.floor(r1 * pal.length)]);
       mesh.setColorAt(n, lodCol);
     });
+    base += c.ids.length;
+    }
     mesh.computeBoundingSphere();
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    c.lod = mesh;
+    // stand-ins are only ever far away (detail is built well beyond the shadow range), so no shadows
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     group.add(mesh);
   }
+  // hide or show one chunk's slice of its region's stand-ins
+  const zero = new Float32Array(16);
+  const setLod = (c: Chunk, show: boolean) => {
+    const m = c.lod;
+    if (!m) return;
+    const arr = m.instanceMatrix.array as Float32Array;
+    const a = c.lodStart * 16, n = c.ids.length * 16;
+    if (!show) {
+      c.lodSaved = arr.slice(a, a + n);
+      for (let k = 0; k < c.ids.length; k++) arr.set(zero, a + k * 16);
+    } else if (c.lodSaved) {
+      arr.set(c.lodSaved, a);
+      c.lodSaved = null;
+    }
+    m.instanceMatrix.needsUpdate = true;
+  };
 
   // ---- full detail, built on demand
   const buildChunk = (c: Chunk) => {
@@ -745,7 +778,7 @@ export function buildBuildings(city: CityData): BuildingMeshes {
     curMb = null;
     for (const o of objs) group.add(o);
     c.detail = objs;
-    if (c.lod) c.lod.visible = false;
+    setLod(c, false);
   };
   const dropChunk = (c: Chunk) => {
     for (const o of c.detail ?? []) {
@@ -754,7 +787,7 @@ export function buildBuildings(city: CityData): BuildingMeshes {
       else if (o instanceof THREE.Mesh) o.geometry.dispose();
     }
     c.detail = null;
-    if (c.lod) c.lod.visible = true;
+    setLod(c, true);
   };
   let detailChunks = 0;
   const chunks = [...chunkMap.values()];
