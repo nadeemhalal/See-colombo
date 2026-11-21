@@ -3,7 +3,8 @@ import type { CityData } from '../types';
 import { RoadGraph } from '../traffic/roadGraph';
 import type { Circle } from '../traffic/traffic';
 import type { Collision } from '../world/collision';
-import { PERSON_KINDS, SKIN_TONES, personDepthMaterial, personGeometry, personMaterial } from './models';
+import { personDepthMaterial, personGeometry, personMaterial } from './models';
+import { kidLook, looks, soloLook, visitorKid, type Look } from './looks';
 
 interface Ped {
   mesh: number;
@@ -25,11 +26,18 @@ interface Ped {
   runT: number;
   /** pose for the shader: upper-body bend about the hips and arm reach (radians) */
   bend: number; reach: number;
+  /** width factor (instance x/z scale) and walking speed factor */
+  girth: number; speedMul: number;
+  /** walking with others: group id (-1 alone), the leader's index (-1 if this is the leader or alone),
+   * place relative to the leader (m, leader's left and forward), and whether they've split up */
+  gid: number; leader: number; ox: number; oz: number; detached: boolean;
+  followers: number[];
 }
 
 export interface Threat { x: number; z: number; heading: number; speed: number }
 
-const COUNT = 180;
+// adults and children are two instanced meshes (two draw calls for everyone)
+const ADULTS = 150, KIDS = 40, COUNT = ADULTS + KIDS;
 const SPAWN_MIN = 25, SPAWN_MAX = 170, DESPAWN = 210;
 const PAVE_Y = 0.04;
 const R = 0.3;
@@ -42,7 +50,6 @@ const rand = () => {
   seed = (seed * 16807) % 2147483647;
   return (seed - 1) / 2147483646;
 };
-const pick = <T>(a: T[]) => a[Math.floor(rand() * a.length)];
 
 /** People walking the pavements, idling, crossing side streets and jumping out of the way of the player's tuk-tuk. */
 export class Pedestrians {
@@ -63,25 +70,87 @@ export class Pedestrians {
   constructor(city: CityData, private collision: Collision, start: THREE.Vector3) {
     this.group.name = 'pedestrians';
     this.graph = new RoadGraph(city, { classes: WALK_CLASSES, ignoreOneway: true });
-    const mat = personMaterial();
-    const depth = personDepthMaterial();
-    PERSON_KINDS.forEach((k, ki) => {
-      const n = Math.round(k.weight * COUNT);
-      const geo = personGeometry(k.kind);
-      const skin = new Float32Array(n * 3), top = new Float32Array(n * 3), lower = new Float32Array(n * 3);
-      const c = new THREE.Color();
-      for (let i = 0; i < n; i++) {
-        const kid = k.kind !== 'sarong' && rand() < 0.1;
-        c.setHex(pick(SKIN_TONES)).toArray(skin, i * 3);
-        // school children in white uniforms
-        c.setHex(kid ? 0xf4f4f0 : pick(k.tops)).toArray(top, i * 3);
-        c.setHex(kid ? (k.kind === 'dress' ? 0xf4f4f0 : 0x1f2a44) : pick(k.lowers)).toArray(lower, i * 3);
-        this.peds.push({ mesh: ki, inst: i, edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
-          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0, scale: kid ? 0.74 : 0.93 + rand() * 0.14 });
+    // ---- who is out: families, tourist couples, groups of friends, school children, older couples,
+    // office workers walking together, and everyone else on their own
+    interface Member { look: Look; kid: boolean; ox: number; oz: number }
+    const groups: Member[][] = [];
+    let adults = ADULTS, kids = KIDS;
+    const side = () => (rand() < 0.5 ? 1 : -1);
+    const take = (m: Member[]) => { groups.push(m); for (const x of m) { if (x.kid) kids--; else adults--; } };
+    for (let f = 0; f < 11 && kids >= 1 && adults >= 2; f++) {
+      const visitors = rand() < 0.25, sx = side();
+      const mum = visitors ? looks.tourist(rand, true) : (rand() < 0.5 ? looks.sareeLady(rand) : looks.dressLady(rand));
+      const dad = visitors ? looks.tourist(rand, false) : (rand() < 0.5 ? looks.casualMan(rand) : looks.officeMan(rand));
+      const m: Member[] = [{ look: dad, kid: false, ox: 0, oz: 0 }, { look: mum, kid: false, ox: 0.7 * sx, oz: 0 }];
+      const n = Math.min(kids, rand() < 0.45 ? 2 : 1);
+      for (let k = 0; k < n; k++) {
+        const fem = rand() < 0.5;
+        m.push({ look: visitors ? visitorKid(rand, fem) : kidLook(rand, false, fem), kid: true, ox: (k === 0 ? 0.35 : -0.35) * sx, oz: 0.85 });
       }
-      geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
-      geo.setAttribute('aTop', new THREE.InstancedBufferAttribute(top, 3));
-      geo.setAttribute('aLower', new THREE.InstancedBufferAttribute(lower, 3));
+      take(m);
+    }
+    while (kids >= 2) {
+      const n = Math.min(kids, rand() < 0.5 ? 3 : 2), m: Member[] = [];
+      for (let k = 0; k < n; k++) m.push({ look: kidLook(rand, true, rand() < 0.5), kid: true, ox: [0, 0.6, -0.6][k], oz: 0 });
+      take(m);
+    }
+    if (kids === 1 && groups.length) { groups[0].push({ look: kidLook(rand, false, rand() < 0.5), kid: true, ox: 0, oz: 1.1 }); kids--; }
+    const pair = (a: Look, b: Look) => take([{ look: a, kid: false, ox: 0, oz: 0 }, { look: b, kid: false, ox: 0.65 * side(), oz: 0 }]);
+    for (let k = 0; k < 7; k++) pair(looks.tourist(rand, rand() < 0.5), looks.tourist(rand, rand() < 0.5));
+    for (let k = 0; k < 6; k++) {
+      const n = rand() < 0.5 ? 3 : 2, m: Member[] = [];
+      for (let j = 0; j < n; j++) m.push({ look: looks.genz(rand, rand() < 0.5), kid: false, ox: [0, 0.62, -0.62][j], oz: 0 });
+      take(m);
+    }
+    for (let k = 0; k < 2; k++) pair(looks.elder(rand, false), looks.elder(rand, true));
+    for (let k = 0; k < 3; k++) pair(rand() < 0.5 ? looks.officeMan(rand) : looks.officeWoman(rand), rand() < 0.5 ? looks.officeMan(rand) : looks.officeWoman(rand));
+    while (adults > 0) take([{ look: soloLook(rand), kid: false, ox: 0, oz: 0 }]);
+
+    // ---- palette of every colour used, in a float texture the shader indexes
+    const palette: number[] = [], palIndex = new Map<number, number>();
+    const ci = (hex: number) => {
+      let i = palIndex.get(hex);
+      if (i === undefined) { i = palette.length; palIndex.set(hex, i); palette.push(hex); }
+      return i;
+    };
+    const perMesh: { look: Look; ped: Ped }[][] = [[], []];
+    groups.forEach((g, gi) => {
+      const solo = g.length === 1;
+      const leaderIdx = this.peds.length;
+      const slow = Math.min(...g.map((m) => m.look.speed));
+      g.forEach((m, j) => {
+        const mesh = m.kid ? 1 : 0;
+        const ped: Ped = { mesh, inst: perMesh[mesh].length, edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
+          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0,
+          scale: m.look.height / 1.73, girth: m.look.girth, speedMul: j === 0 ? slow : m.look.speed,
+          gid: solo ? -1 : gi, leader: j === 0 ? -1 : leaderIdx, ox: m.ox, oz: m.oz, detached: false, followers: [] };
+        if (j > 0) this.peds[leaderIdx].followers.push(this.peds.length);
+        this.peds.push(ped);
+        perMesh[mesh].push({ look: m.look, ped });
+      });
+    });
+    for (const list of perMesh) for (const { look } of list) for (const c of [look.skin, look.topC, look.lowerC, look.hairC, look.accent, look.shoe]) ci(c);
+    const palData = new Float32Array(256 * 4), col = new THREE.Color();
+    palette.slice(0, 256).forEach((hex, i) => { col.setHex(hex); palData.set([col.r, col.g, col.b, 1], i * 4); });
+    const palTex = new THREE.DataTexture(palData, 256, 1, THREE.RGBAFormat, THREE.FloatType);
+    palTex.needsUpdate = true;
+
+    const mat = personMaterial(palTex);
+    const depth = personDepthMaterial();
+    perMesh.forEach((list, mi) => {
+      const n = list.length;
+      const geo = personGeometry(mi === 1);
+      const opt = new Float32Array(n * 4), colA = new Float32Array(n * 4), colB = new Float32Array(n * 4), acc = new Float32Array(n);
+      list.forEach(({ look: l }, i) => {
+        opt.set([l.lower, l.top, l.hair, l.head], i * 4);
+        colA.set([ci(l.skin), ci(l.topC), ci(l.lowerC), ci(l.hairC)], i * 4);
+        colB.set([ci(l.accent), ci(l.shoe), l.fem, l.stoop], i * 4);
+        acc[i] = l.acc;
+      });
+      geo.setAttribute('aOpt', new THREE.InstancedBufferAttribute(opt, 4));
+      geo.setAttribute('aColA', new THREE.InstancedBufferAttribute(colA, 4));
+      geo.setAttribute('aColB', new THREE.InstancedBufferAttribute(colB, 4));
+      geo.setAttribute('aAcc', new THREE.InstancedBufferAttribute(acc, 1));
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
       anim.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aAnim', anim);
@@ -94,7 +163,7 @@ export class Pedestrians {
       this.anim.push(anim);
       this.group.add(mesh);
     });
-    for (const p of this.peds) this.spawn(p, start, 4, SPAWN_MAX);
+    for (const p of this.peds) if (p.leader < 0) this.spawn(p, start, 4, SPAWN_MAX);
   }
 
   private offset(p: Ped): number {
@@ -132,12 +201,57 @@ export class Pedestrians {
       if (this.collision.pointBlocked(t.x, 0.5, t.z)) continue;
       p.x = t.x; p.z = t.z;
       p.heading = Math.atan2(e.dx, e.dz);
-      p.speed = 1.05 + rand() * 0.45;
+      p.speed = (1.05 + rand() * 0.35) * p.speedMul;
       p.idleT = rand() < 0.15 ? 3 + rand() * 15 : 0;
       p.fleeT = 0;
+      this.gather(p, around);
       return;
     }
     p.edge = -1;
+  }
+
+  /** put a leader's companions in place beside them (those not already off on their own nearby) */
+  private gather(L: Ped, player: THREE.Vector3) {
+    const t = { x: 0, z: 0 };
+    for (const fi of L.followers) {
+      const f = this.peds[fi];
+      if (f.detached && f.edge >= 0 && Math.hypot(f.x - player.x, f.z - player.z) < 60) continue;
+      this.slot(f, L, t);
+      f.x = t.x; f.z = t.z; f.heading = L.heading; f.edge = L.edge; f.side = L.side;
+      f.detached = false; f.downT = 0; f.fall = 0; f.runT = 0; f.fleeT = 0; f.idleT = 0; f.bend = 0; f.reach = 0;
+    }
+  }
+
+  /** where a companion walks: beside or a little ahead of the leader, turned with them */
+  private slot(f: Ped, L: Ped, out: { x: number; z: number }) {
+    const c = Math.cos(L.heading), sn = Math.sin(L.heading);
+    out.x = L.x + c * f.ox + sn * f.oz;
+    out.z = L.z - sn * f.ox + c * f.oz;
+    if (this.collision.pointBlocked(out.x, 0.5, out.z)) {
+      // no room beside them (a wall, a pillar): fall in behind
+      out.x = L.x - sn * (0.8 + Math.abs(f.ox) * 0.5);
+      out.z = L.z - c * (0.8 + Math.abs(f.ox) * 0.5);
+    }
+    return out;
+  }
+
+  /** move a companion towards their place in the group; returns their speed, for the walk cycle */
+  private follow(f: Ped, L: Ped, dt: number) {
+    const t = this.slot(f, L, { x: 0, z: 0 });
+    f.edge = L.edge; f.side = L.side; f.s = L.s;
+    const ox = f.x, oz = f.z;
+    const d = Math.hypot(t.x - f.x, t.z - f.z);
+    if (d > 8) { f.x = t.x; f.z = t.z; }
+    else {
+      const k = 1 - Math.exp(-5 * dt);
+      f.x += (t.x - f.x) * k; f.z += (t.z - f.z) * k;
+    }
+    const mx = f.x - ox, mz = f.z - oz, v = Math.hypot(mx, mz) / Math.max(dt, 1e-3);
+    let want = v > 0.3 ? Math.atan2(mx, mz) : L.heading;
+    let dh = want - f.heading;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    f.heading += dh * Math.min(1, 6 * dt);
+    return v > 0.25 ? Math.min(v, 2.5) : 0;
   }
 
   /**
@@ -147,7 +261,7 @@ export class Pedestrians {
   dropAt(x: number, z: number, fromX: number, fromZ: number) {
     let best: Ped | null = null, bd = -1;
     for (const p of this.peds) {
-      if (p.edge < 0 || p.downT > 0) continue;
+      if (p.edge < 0 || p.downT > 0 || p.gid >= 0) continue;
       const d = Math.hypot(p.x - x, p.z - z);
       if (d > bd) { bd = d; best = p; }
     }
@@ -215,6 +329,15 @@ export class Pedestrians {
       p.fall = 0;
       p.heading = Math.atan2(-ax, -az); // falls on their back, facing the hit
       p.fleeT = 0; p.idleT = 0; p.amp = 0;
+      if (p.leader >= 0) p.detached = true;
+      // whoever they were with scatters too
+      if (p.gid >= 0) {
+        for (const q of this.peds) {
+          if (q === p || q.gid !== p.gid || q.edge < 0 || q.downT > 0) continue;
+          if (q.leader >= 0) q.detached = true;
+          if (this.reattach(q, fromX, fromZ)) { q.runT = 5 + rand() * 3; q.idleT = 0; }
+        }
+      }
       n++;
     }
     return n;
@@ -236,8 +359,16 @@ export class Pedestrians {
 
     this.peds.forEach((p, i) => {
       // thin out at night by parking the higher indices
-      const wanted = (i * 7919) % COUNT < active;
+      // (companions go with their leader)
+      const wanted = ((p.leader >= 0 ? p.leader : i) * 7919) % COUNT < active;
       if (!wanted) { p.edge = -1; return; }
+      let moving = 0;
+      if (p.leader >= 0 && !p.detached) {
+        // walking with someone: keep to their side
+        const L = this.peds[p.leader];
+        if (L.edge < 0) { p.edge = -1; return; }
+        moving = this.follow(p, L, dt);
+      } else {
       if (p.edge < 0 || Math.hypot(p.x - player.x, p.z - player.z) > DESPAWN) {
         this.spawn(p, player, SPAWN_MIN, SPAWN_MAX, view);
         if (p.edge < 0) return;
@@ -297,7 +428,6 @@ export class Pedestrians {
         }
       }
 
-      let moving = 0;
       if (p.fleeT > 0) {
         p.fleeT -= dt;
         const nx = p.x + p.fx * dt, nz = p.z + p.fz * dt;
@@ -370,6 +500,8 @@ export class Pedestrians {
         }
       }
 
+      }
+
       // personal space: push apart from neighbours and the player
       const cx = Math.floor(p.x / 4), cz = Math.floor(p.z / 4);
       for (let ix = -1; ix <= 1; ix++)
@@ -418,7 +550,7 @@ export class Pedestrians {
           this.q.multiply(this.qf.setFromAxisAngle(this.xAxis, -e * (Math.PI / 2 - 0.08)));
           y += e * 0.12;
         }
-        this.m4.compose(this.v.set(p.x, y, p.z), this.q, this.sc.setScalar(p.scale));
+        this.m4.compose(this.v.set(p.x, y, p.z), this.q, this.sc.set(p.scale * p.girth, p.scale, p.scale * p.girth));
       }
       mesh.setMatrixAt(p.inst, this.m4);
       this.anim[p.mesh].setXYZW(p.inst, p.phase, p.amp, p.bend, p.reach);
