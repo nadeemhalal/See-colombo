@@ -35,6 +35,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1116; col
 #clock.fast::after { content: ' ▶▶'; font-size: 13px; color: var(--accent); }
 #found { font-size: 13px; opacity: 0.9; }
 #fps { font-size: 11px; opacity: 0.55; }
+#money { font-size: 16px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+#money.flash { animation: money-flash 1.2s; }
+@keyframes money-flash { 0%, 40% { transform: scale(1.35); color: #fff; } 100% { transform: scale(1); } }
+#money { transform-origin: right center; }
+
+#job {
+  position: absolute; left: 50%; top: 58px; transform: translateX(-50%); background: var(--panel); padding: 8px 18px;
+  border-radius: 10px; border-top: 3px solid #ffc928; text-align: center; opacity: 0; transition: opacity 0.3s; min-width: 220px;
+}
+#job.show { opacity: 1; }
+#job-title { font-weight: 700; font-size: 16px; }
+#job-info { font-size: 13px; opacity: 0.9; font-variant-numeric: tabular-nums; }
+#job-toast {
+  position: absolute; left: 50%; top: 22%; transform: translateX(-50%); background: var(--panel); padding: 9px 16px;
+  border-radius: 10px; font-size: 15px; max-width: min(560px, calc(100% - 32px)); text-align: center; opacity: 0; transition: opacity 0.4s;
+}
+#job-toast.show { opacity: 1; }
 
 #banner {
   position: absolute; left: 50%; top: 12%; transform: translateX(-50%); font-size: 34px; font-weight: 800; letter-spacing: 0.1em;

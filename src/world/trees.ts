@@ -4,7 +4,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CityData } from '../types';
 import type { Collision } from './collision';
 
-const CHUNK = 800;
+// small enough that only the patches around you are drawn into the shadow map
+const CHUNK = 400;
 
 function palmCrown(): THREE.BufferGeometry {
   const fronds: THREE.BufferGeometry[] = [];

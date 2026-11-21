@@ -22,15 +22,17 @@
           <span><b>Space</b> jump / climb</span><span><b>C</b> walk</span><span><b>M</b> map &amp; fast travel</span>
           <span><b>Wheel</b> zoom</span><span><b>T</b> fast time</span><span><b>[ ]</b> &plusmn;1 hour</span>
           <span><b>Enter</b> get in / out, take a vehicle</span><span><b>Q</b> horn</span><span><b>N</b> mute</span>
-          <span><b>O</b> change outfit</span><span><b>G</b> graphics quality</span><span><b>R</b> back to Galle Face</span><span><b>H</b> help</span><span><b>F</b> punch</span><span><b>Arrows</b> look</span><span><b>Z</b> auto-run</span><span><b>Esc</b> pause</span>
+          <span><b>O</b> change outfit</span><span><b>G</b> graphics quality</span><span><b>R</b> back to Galle Face</span><span><b>H</b> help</span><span><b>F</b> punch</span><span><b>J</b> tuk-tuk taxi jobs on / off</span><span><b>Arrows</b> look</span><span><b>Z</b> auto-run</span><span><b>Esc</b> pause</span>
         </div>
       </div>
     </div>
 
     <div id="hud">
       <div id="loc"><div id="loc-road"></div><div id="loc-area"></div></div>
-      <div id="topright"><div id="clock"></div><div id="found"></div><div id="fps"></div></div>
+      <div id="topright"><div id="clock"></div><div id="found"></div><div id="money"></div><div id="fps"></div></div>
       <div id="banner"></div>
+      <div id="job"><div id="job-title"></div><div id="job-info"></div></div>
+      <div id="job-toast"></div>
       <div id="card"><div id="card-title"></div><div id="card-info"></div></div>
       <canvas id="minimap"></canvas>
       <div id="mousehint"><b>Click</b> the screen to capture the mouse, so turning doesn't stop at the screen edge</div>
@@ -38,7 +40,7 @@
       <div id="speed"><span id="speed-val">0</span><small>km/h</small><div class="drive-keys" id="drive-keys">W/S throttle · A/D steer · Space brake · Q horn · E get out</div></div>
       <div id="help">
         WASD move · Z auto-run (S stops) · Mouse or arrows look · F or click punch · Shift sprint · C walk · Space jump (hold into a low wall to climb) ·
-        Enter get in/out of any vehicle or board a stopped train · Q horn · N mute · M map (click to fast travel) · T fast time · [ ] change hour · O change outfit · G graphics quality · R respawn · Esc pause
+        Enter get in/out of any vehicle or board a stopped train · Q horn · J taxi jobs on/off (drive a tuk-tuk and stop next to someone waving) · N mute · M map (click to fast travel) · T fast time · [ ] change hour · O change outfit · G graphics quality · R respawn · Esc pause
       </div>
       <div id="attrib">Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
     </div>

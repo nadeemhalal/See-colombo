@@ -168,10 +168,13 @@ export function chunkedInstances<T extends { x: number; z: number }>(
 }
 
 /** Hide the chunk meshes in a group whose bounding sphere lies further than `radius` from (x,z). */
-export function cullByDistance(group: THREE.Object3D, x: number, z: number, radius: number) {
+/** hide a group's meshes further than `radius` from (x, z); with `shadowRadius`, only those within it cast shadows */
+export function cullByDistance(group: THREE.Object3D, x: number, z: number, radius: number, shadowRadius?: number) {
   for (const m of group.children) {
     const s = (m as THREE.InstancedMesh).boundingSphere ?? (m as THREE.Mesh).geometry?.boundingSphere;
     if (!s) continue;
-    m.visible = Math.hypot(s.center.x - x, s.center.z - z) - s.radius < radius;
+    const d = Math.hypot(s.center.x - x, s.center.z - z) - s.radius;
+    m.visible = d < radius;
+    if (shadowRadius !== undefined) m.castShadow = d < shadowRadius;
   }
 }

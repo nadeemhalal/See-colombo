@@ -24,6 +24,7 @@ import { renderCityMap } from './ui/mapRender';
 import { Minimap } from './ui/minimap';
 import { BigMap } from './ui/bigmap';
 import { Hud } from './ui/hud';
+import { Taxi } from './game/taxi';
 import { RoadGraph } from './traffic/roadGraph';
 import { Traffic, type Agent, type Circle } from './traffic/traffic';
 import { TukTuk, Vehicle } from './player/vehicle';
@@ -136,6 +137,8 @@ async function main() {
   scene.add(furniture.group);
   traffic.furniture = furniture;
   const sound = new Sound();
+  const taxi = new Taxi(city, peds, graph, () => sound.cash());
+  scene.add(taxi.group);
 
   const TUK_COLORS = [0xb3201e, 0x1f7a3a, 0x1b4f9c, 0xe0b400, 0x5a1a1a, 0x1c1c1c];
   const parked: Vehicle[] = [];
@@ -222,6 +225,7 @@ async function main() {
     v.speed = 0;
     driving = null;
     character.seated = false;
+    taxi.leftVehicle();
   };
   const getIn = (v: Vehicle) => {
     driving = v;
@@ -367,6 +371,7 @@ async function main() {
       else { bigmap.show(player.pos.x, player.pos.z, player.facing); input.free = input.wantLock = false; input.unlock(); }
     }
     if (input.wasPressed('KeyH')) $('help').classList.toggle('show');
+    if (input.wasPressed('KeyJ')) taxi.toggle();
     if (input.wasPressed('KeyO')) {
       const o = character.setOutfit(character.outfit + 1);
       try { localStorage.setItem('seeColombo.outfit', String(character.outfit)); } catch { /* storage blocked */ }
@@ -440,7 +445,7 @@ async function main() {
         // slow or near a place of worship: people and cars are solid as before
         const solid = Math.abs(sp) > 2 && !calm ? others.slice() : others.concat(people);
         const impact = driving.drive(dt, input, collision, mask, traffic.circles(solid));
-        if (Math.max(impact, hit) > 2) sound.bump(Math.max(impact, hit));
+        if (Math.max(impact, hit) > 2) { sound.bump(Math.max(impact, hit)); taxi.bump(Math.max(impact, hit)); }
         if (input.wasPressed('KeyQ')) sound.horn(1);
         player.pos.set(driving.pos.x, 0, driving.pos.z);
       } else if (!riding) {
@@ -486,7 +491,7 @@ async function main() {
       const info = tr.state === 'dwell' || tr.stopName === 'End of the map'
         ? `${tr.stopName} · E get off` : `Next: ${trains.nextStopName(tr)} · stops at every station`;
       $('drive-keys').textContent = info;
-    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · Enter get out';
+    } else if (driving) $('drive-keys').textContent = 'W/S throttle · A/D steer · Space brake · Q horn · Enter get out' + (driving.type.name === 'tuktuk' ? ` · J taxi jobs ${taxi.enabled ? 'on' : 'off'}` : '');
 
     camFwd.set(-Math.sin(follow.yaw), 0, -Math.cos(follow.yaw));
     // the vehicle you're in is solid to traffic and people along its whole length (a bus is 11 m)
@@ -506,7 +511,10 @@ async function main() {
     // stream building detail around you (more per frame when you're moving fast), cull far trees and lamps
     const focus = driving ? driving.pos : player.pos;
     buildings.update(focus.x, focus.z, driving && Math.abs(driving.speed) > 15 ? 2 : 1);
-    cullByDistance(trees, focus.x, focus.z, 650);
+    cullByDistance(trees, focus.x, focus.z, 650, 180);
+    cullByDistance(furniture.group, focus.x, focus.z, 1200, 200);
+    // building stand-ins this far out are lost in the haze
+    cullByDistance(buildings.group, focus.x, focus.z, 4500);
     cullByDistance(lamps.group, focus.x, focus.z, 700);
     lamps.update(dt, env.night, player.pos);
     planes.update(dt, player.pos, env.night);
@@ -531,6 +539,11 @@ async function main() {
     water.uniforms.uFogDensity.value = env.fog.density;
 
     hud.update(dt, player.pos.x, player.pos.z, minutes);
+    taxi.update(dt, {
+      tuk: driving && driving.type.name === 'tuktuk' ? { x: driving.pos.x, z: driving.pos.z, heading: driving.heading, speed: driving.speed } : null,
+      px: player.pos.x, pz: player.pos.z,
+    });
+    minimap.markers = taxi.markers();
     minimap.draw(player.pos.x, player.pos.z, follow.yaw, driving ? driving.heading : player.facing);
 
     post.render();
@@ -542,7 +555,7 @@ async function main() {
   });
 
   // debug hook for testing in the console
-  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, furniture, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, takeFromTraffic, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
+  (window as unknown as Record<string, unknown>).seeColombo = { player, follow, input, travel, traffic, peds, trains, furniture, taxi, boardTrain, leaveTrain, get riding() { return riding; }, parked, collision, mask, character, getIn, getOut, takeFromTraffic, get driving() { return driving; }, city, renderer, scene, camera, post, lamps, env, planes, getQuality: () => quality, setTime: (h: number) => (minutes = h * 60) };
 }
 
 main().catch((e) => {

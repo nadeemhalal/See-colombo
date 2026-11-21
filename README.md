@@ -26,6 +26,7 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - Coastal line trains between Maradana and the south edge of the map, through Colombo Fort, Secretariat Halt, Kompannavidiya, Kollupitiya and Bambalapitiya. Two trains, one each way, on the left-hand track. They stop at every station for 25 seconds, sound the horn when leaving, and stop and sound the horn if you or a car are on the line. Board at any stopped train's door (E), ride standing in the doorway, and get off at any stop
 - Fighting and crashes: punch with F or the left mouse button and people are knocked down, lie there, then get up and run off. Hit people with the tuk-tuk at speed and they go down too. Ramming traffic shares momentum by mass: a bicycle or scooter is thrown aside and falls over, a car is shoved and spun, a bus barely moves and stops you dead. Crashed vehicles slide to a halt and then rejoin traffic. None of this works within 120 m of the Red Mosque, Gangaramaya Temple or Seema Malaka (places of worship are exploration only)
 - Aircraft overhead: airliners crossing high on the Bandaranaike approach and departure routes, and a lower turboprop, with navigation lights and strobes at night
+- Tuk-tuk taxi jobs: while you drive a tuk-tuk, someone nearby steps to the kerb and waves you down (yellow marker, also on the minimap). Stop beside them to pick them up, then drive to the landmark they ask for (a tall yellow beam marks the drop-off) and stop there. You're paid a metered fare (Rs 100 for the first km, then Rs 85 a km) plus a tip of up to 30% for beating the tip time without bumps. Money is saved in the browser. J turns jobs on or off
 - Roads, bridges and causeways are walkable everywhere, so you can walk from Galle Face to the Lotus Tower
 - Synthesised sound: tuk-tuk engine, horns, train horn, bumps (N to mute)
 - Road and district readout, district banner, landmark cards and a 40-landmark checklist (saved in the browser): Fort and Pettah, Independence Square, the Racecourse, Nelum Pokuna, BMICH, Kotahena's churches and kovils, Wolvendaal Church, the stadiums, the malls on Galle Road, Port City and the Kelani bridge
@@ -77,6 +78,7 @@ Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts)
 | A / D | Steer (driving) |
 | Space | Brake (driving) |
 | Q | Horn |
+| J | Tuk-tuk taxi jobs on or off |
 | N | Mute sound |
 | R | Back to Galle Face Green |
 | O | Change outfit |
@@ -96,6 +98,7 @@ src/
   main.ts           game setup and main loop
   world/            ground, water, roads, buildings, trees, Lotus Tower, sky/sun, collision, land mask
   player/           input, character model and animation, movement, camera
+  game/             tuk-tuk taxi jobs
   traffic/          road graph, vehicle models, traffic simulation
   people/           pedestrian models (shader-animated) and simulation
   trains/           coastal line trains: timetable, station stops, boarding
@@ -125,7 +128,8 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 - The metro bus copies the colours of the Lanka Metro Transit buses but not their logo.
 - Traffic only exists within about 300 m of you; it spawns out of view and despawns behind you.
 - The character sits the same way in every vehicle (no separate pose for a car seat or handlebars), and there are no doors opening or exit animations.
-- On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Expect roughly 30 fps there; press G for High on a stronger GPU.
+- On integrated graphics (e.g. Intel Iris Xe) the game starts on Low quality: 1x resolution, FXAA instead of multisampling, smaller shadow map. Distant people, trees and street furniture are drawn simpler and without shadows, which keeps a typical frame around 300 draw calls and 2.2M triangles. Expect 30 to 60 fps there; press G for High on a stronger GPU.
+- The map file (public/data/city.json, 9 MB, about 3 MB compressed) is loaded in one go at start; it is not streamed yet.
 - Lamp light is painted at about 2.5 m per pixel, so pools are soft rather than sharp-edged.
 - Buildings are still built from OSM footprints, so a whole block mapped as one footprint is split into shop plots only along its street side. Awnings, verandah columns and balconies are visual only (you walk through the posts). Building shapes come from OSM alone; better footprints and heights (Overture, Google Open Buildings) would need a data download.
 - Dewatagaha Mosque and Kayman's Gate are not mapped in OSM by name, so their landmark points are placed by hand and are approximate. Port City is mostly unbuilt in OSM.

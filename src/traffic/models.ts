@@ -89,7 +89,7 @@ function extrude(shape: P2[] | THREE.Shape, width: number, o: SlabOpts) {
   const bv = Math.min(o.bevel ?? 0, width / 2 - 0.003);
   const depth = Math.max(0.002, width - 2 * Math.max(bv, 0));
   const g = new THREE.ExtrudeGeometry(Array.isArray(shape) ? shapeOf(shape) : shape, {
-    depth, bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv, bevelOffset: -bv, bevelSegments: 2, curveSegments: 10,
+    depth, bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv, bevelOffset: -bv, bevelSegments: 2, curveSegments: 6,
   });
   g.translate(0, 0, -depth / 2);
   return g;
@@ -134,7 +134,7 @@ function limb(a: V3, b: V3, r: number, hex: number, seg = 6): Part {
   const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
   const d = B.clone().sub(A);
   const L = Math.max(0.001, d.length());
-  const g = new THREE.CapsuleGeometry(r, L, 2, seg);
+  const g = new THREE.CapsuleGeometry(r, L, 1, seg);
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
   g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
   return col(g, hex);
@@ -462,7 +462,7 @@ export function bicycle(rider_ = true): Part {
     disc(0.03, 0, 0.9, 0.43, HEAD),
   ];
   for (const w of [R, F]) {
-    parts.push(col(new THREE.TorusGeometry(r, 0.025, 6, 20).rotateY(Math.PI / 2).translate(0, w[1], w[2]), TYRE));
+    parts.push(col(new THREE.TorusGeometry(r, 0.025, 5, 14).rotateY(Math.PI / 2).translate(0, w[1], w[2]), TYRE));
     parts.push(col(new THREE.CylinderGeometry(0.03, 0.03, 0.1, 8).rotateZ(Math.PI / 2).translate(0, w[1], w[2]), CHROME));
     for (let k = 0; k < 4; k++) parts.push(box(0.006, r * 1.9, 0.006, 0, w[1], w[2], RIM, (k * Math.PI) / 4));
   }

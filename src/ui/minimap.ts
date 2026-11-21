@@ -7,6 +7,8 @@ export class Minimap {
   private size = 210;
   private dpr = Math.min(window.devicePixelRatio || 1, 2);
   zoom = 1.1; // screen px per map px
+  /** job markers (taxi pick-up, drop-off): pinned to the rim when off the map */
+  markers: { x: number; z: number; color: string }[] = [];
 
   constructor(el: HTMLCanvasElement, private map: HTMLCanvasElement, private labels: RoadLabel[], private city: CityData, private visited: Set<string>) {
     el.width = this.size * this.dpr;
@@ -74,6 +76,22 @@ export class Minimap {
       ctx.restore();
     }
     ctx.restore();
+
+    // job markers, upright; ones beyond the rim sit on it pointing the way
+    const cs = Math.cos(camYaw), sn = Math.sin(camYaw);
+    for (const mk of this.markers) {
+      const dx = ((mk.x - px) / MAP_MPP) * zm, dz = ((mk.z - pz) / MAP_MPP) * zm;
+      let sx = dx * cs - dz * sn, sy = dx * sn + dz * cs;
+      const d = Math.hypot(sx, sy), lim = R - 12;
+      if (d > lim) { sx *= lim / d; sy *= lim / d; }
+      ctx.beginPath();
+      ctx.arc(R + sx, R + sy, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = mk.color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#1b1b1b';
+      ctx.stroke();
+    }
 
     // player arrow
     ctx.save();

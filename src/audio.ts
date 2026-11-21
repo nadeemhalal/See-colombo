@@ -103,6 +103,24 @@ export class Sound {
     }
   }
 
+  /** two bright notes when a fare is paid */
+  cash() {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    [988, 1319].forEach((f, i) => {
+      const o = this.ctx!.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = this.ctx!.createGain();
+      g.gain.setValueAtTime(0.0001, t + i * 0.11);
+      g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.11 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.11 + 0.35);
+      o.connect(g).connect(this.master!);
+      o.start(t + i * 0.11);
+      o.stop(t + i * 0.11 + 0.4);
+    });
+  }
+
   bump(strength: number) {
     if (!this.ctx || !this.master) return;
     const t = this.ctx.currentTime;

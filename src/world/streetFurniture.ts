@@ -14,7 +14,7 @@ type Part = THREE.BufferGeometry;
 
 const CONCRETE = 0xb9b3a7, CONCRETE_DARK = 0x8f8a80, POLE = 0x5b5f63, SIGN_BLUE = 0x1d4f91, BENCH = 0x7d5a3c;
 const SIGNAL_BODY = 0x1b1d1f, PLATFORM_EDGE = 0xe3c22b;
-const REGION = 1000;
+const REGION = 400;
 
 /** green / amber / red timings (s) for a junction with two groups of approaches */
 const GREEN = 14, AMBER = 3, ALL_RED = 1.5;
@@ -65,13 +65,18 @@ export class StreetFurniture {
 
     const mat = vehicleMaterial();
     for (const parts of regions.values()) {
-      const m = new THREE.Mesh(merge(parts), mat);
+      const merged = merge(parts);
+      const m = new THREE.Mesh(merged, mat);
       m.castShadow = true;
       m.receiveShadow = true;
+      merged.computeBoundingSphere();
       this.group.add(m);
     }
     // signal lenses: red, amber, green, one instance per head; colours change with the light
     const lensGeo = new THREE.CylinderGeometry(0.095, 0.095, 0.03, 12).rotateX(Math.PI / 2);
+    // in their own group so distance culling of the poles (by region) leaves them alone; they never cast shadows
+    const lensGroup = new THREE.Group();
+    this.group.add(lensGroup);
     [0.31, 0, -0.31].forEach((dy) => {
       const mesh = new THREE.InstancedMesh(lensGeo, new THREE.MeshBasicMaterial({ toneMapped: false }), Math.max(1, heads.length));
       const off = new THREE.Matrix4().makeTranslation(0, dy, 0.14);
@@ -79,7 +84,7 @@ export class StreetFurniture {
       mesh.count = heads.length;
       mesh.setColorAt(0, new THREE.Color());
       this.lenses.push(mesh);
-      this.group.add(mesh);
+      lensGroup.add(mesh);
     });
     this.stats.heads = heads.length;
     this.stats.junctions = this.junctions.length;

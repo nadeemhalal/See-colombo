@@ -41,8 +41,11 @@ export class Traffic {
   private hash = new Map<number, number[]>();
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
-
   private eul = new THREE.Euler();
+  private v3 = new THREE.Vector3();
+  private one = new THREE.Vector3(1, 1, 1);
+  /** per vehicle type: minX, minZ, maxX, maxZ of the ones on the road this frame */
+  private boxes = VEHICLE_TYPES.map(() => new Float64Array(4));
   /** traffic lights and bus stops (set by main once built) */
   furniture: StreetFurniture | null = null;
   /** called when a car honks at the player (distance in metres) */
@@ -55,7 +58,7 @@ export class Traffic {
       const mesh = new THREE.InstancedMesh(t.geo(), vehicleMaterial(), counts[ti]);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.frustumCulled = false; // instances move every frame
+      // instances move every frame: the bounds are refreshed after each update so whole types out of view are skipped
       this.meshes.push(mesh);
       this.group.add(mesh);
       const c = new THREE.Color();
@@ -331,20 +334,38 @@ export class Traffic {
       a.heading += dh * Math.min(1, (2 + a.speed) * dt);
     }
 
-    // write instances
+    // write instances, and track each type's extent over the vehicles actually on the road so the
+    // camera can skip a type that's out of view (parked, zero-scaled slots would otherwise pull the
+    // bounding sphere to the map origin)
+    const box = this.boxes;
+    for (const bx of box) bx.fill(Infinity, 0, 2), bx.fill(-Infinity, 2, 4);
     for (const a of this.agents) {
       const mesh = this.meshes[a.type];
       if (a.edge < 0) {
         this.m4.makeScale(0, 0, 0);
       } else {
         this.q.setFromEuler(this.eul.set(0, a.heading, a.tilt, 'YXZ'));
-        this.m4.compose(new THREE.Vector3(a.x, ROAD_Y, a.z), this.q, new THREE.Vector3(1, 1, 1));
+        this.m4.compose(this.v3.set(a.x, ROAD_Y, a.z), this.q, this.one);
+        const bx = box[a.type];
+        if (a.x < bx[0]) bx[0] = a.x;
+        if (a.z < bx[1]) bx[1] = a.z;
+        if (a.x > bx[2]) bx[2] = a.x;
+        if (a.z > bx[3]) bx[3] = a.z;
       }
       mesh.setMatrixAt(a.inst, this.m4);
     }
-    for (const m of this.meshes) {
+    this.meshes.forEach((m, i) => {
       m.instanceMatrix.needsUpdate = true;
+      const bx = box[i];
+      const sphere = (m.boundingSphere ??= new THREE.Sphere());
+      if (bx[0] > bx[2]) {
+        sphere.center.set(0, -1e5, 0); // none on the road
+        sphere.radius = 0;
+      } else {
+        sphere.center.set((bx[0] + bx[2]) / 2, 1.5, (bx[1] + bx[3]) / 2);
+        sphere.radius = Math.hypot(bx[2] - bx[0], bx[3] - bx[1]) / 2 + 8;
+      }
       if (m.instanceColor) m.instanceColor.needsUpdate = false;
-    }
+    });
   }
 }

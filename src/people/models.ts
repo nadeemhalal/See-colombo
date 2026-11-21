@@ -48,20 +48,31 @@ function part(g: Part, o: PartOpts): Part {
   return g;
 }
 
+// the far-away version of the body uses fewer segments and leaves out the face and tiny parts
+let LOW = false;
+const lo = (n: number, m: number) => (LOW ? m : n);
 /** vertical capsule spanning y0..y1 */
 const seg = (r: number, y0: number, y1: number, x: number, z = 0, radial = 7) =>
-  new THREE.CapsuleGeometry(r, Math.max(0.002, y1 - y0 - 2 * r), 2, radial).translate(x, (y0 + y1) / 2, z);
-const ball = (r: number, x: number, y: number, z: number, w = 8, h = 6) => new THREE.SphereGeometry(r, w, h).translate(x, y, z);
+  new THREE.CapsuleGeometry(r, Math.max(0.002, y1 - y0 - 2 * r), lo(2, 1), lo(radial, 5)).translate(x, (y0 + y1) / 2, z);
+const ball = (r: number, x: number, y: number, z: number, w = 8, h = 6) => new THREE.SphereGeometry(r, lo(w, 6), lo(h, 4)).translate(x, y, z);
 const ellipsoid = (sx: number, sy: number, sz: number, x: number, y: number, z: number, w = 10, h = 7) =>
-  new THREE.SphereGeometry(1, w, h).scale(sx, sy, sz).translate(x, y, z);
+  new THREE.SphereGeometry(1, lo(w, 7), lo(h, 5)).scale(sx, sy, sz).translate(x, y, z);
 const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 /** open, slightly flattened tube from y0 to y1 (skirts) */
 const tube = (rTop: number, rBot: number, y0: number, y1: number) =>
-  new THREE.CylinderGeometry(rTop, rBot, y1 - y0, 14, 1, true).translate(0, (y0 + y1) / 2, 0).scale(1, 1, 0.8);
+  new THREE.CylinderGeometry(rTop, rBot, y1 - y0, lo(14, 8), 1, true).translate(0, (y0 + y1) / 2, 0).scale(1, 1, 0.8);
 
-function build(kid: boolean): THREE.BufferGeometry {
+function build(kid: boolean, low: boolean): THREE.BufferGeometry {
+  LOW = low;
   const parts: Part[] = [];
-  const add = (g: Part, o: PartOpts) => parts.push(part(g, o));
+  const add = (g: Part, o: PartOpts) => {
+    if (low) {
+      // skip eyes, brows, mouth, nose, ears: too small to see from far away
+      g.computeBoundingSphere();
+      if (g.boundingSphere!.radius < 0.03) return;
+    }
+    parts.push(part(g, o));
+  };
   // children: a bigger head for the body (the instance scale makes them small)
   const headScale = kid ? 1.3 : 1;
   const head = (g: Part, o: PartOpts) => add(g.translate(0, -1.5, 0).scale(headScale, headScale, headScale).translate(0, 1.5, 0), o);
@@ -71,7 +82,7 @@ function build(kid: boolean): THREE.BufferGeometry {
     const x = 0.095 * s;
     add(seg(0.07, 0.46, 0.93, x), { slot: S_SKIN, limb, joint: 0 });
     add(seg(0.054, 0.07, 0.5, x), { slot: S_SKIN, limb, joint: 1 });
-    add(new THREE.CapsuleGeometry(0.046, 0.15, 2, 7).rotateX(Math.PI / 2).scale(1.05, 0.8, 1).translate(x, 0.045, 0.045), { slot: S_SHOE, limb, joint: 1 });
+    add(new THREE.CapsuleGeometry(0.046, 0.15, lo(2, 1), lo(7, 5)).rotateX(Math.PI / 2).scale(1.05, 0.8, 1).translate(x, 0.045, 0.045), { slot: S_SHOE, limb, joint: 1 });
     // long trousers or jeans over the leg, shorts to above the knee
     add(seg(0.083, 0.45, 0.95, x), { slot: S_LOWER, limb, joint: 0, group: G_LOWER, mask: bits(LOWER.trousers) });
     add(seg(0.066, 0.1, 0.51, x), { slot: S_LOWER, limb, joint: 1, group: G_LOWER, mask: bits(LOWER.trousers) });
@@ -86,10 +97,10 @@ function build(kid: boolean): THREE.BufferGeometry {
   // ---- torso: shaped (hips, waist, chest, shoulders), flattened front to back
   const prof = [[0.1, 0.94], [0.15, 0.97], [0.158, 1.01], [0.155, 1.06], [0.15, 1.12], [0.164, 1.23], [0.172, 1.31], [0.162, 1.38], [0.12, 1.435], [0.05, 1.47]]
     .map(([r, y]) => new THREE.Vector2(r, y));
-  add(new THREE.LatheGeometry(prof, 12).scale(1, 1, 0.62), { slot: S_TOP });
+  add(new THREE.LatheGeometry(prof, lo(12, 7)).scale(1, 1, 0.62), { slot: S_TOP });
   // shirt collar, hoodie hood, saree drape (osariya) across the body and the pallu down the back
   add(box(0.13, 0.03, 0.07, 0, 1.455, 0.055), { slot: S_TOP, group: G_TOP, mask: bits(TOP.shirt) });
-  add(new THREE.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.13, 0.08, 0.11).translate(0, 1.43, -0.085), { slot: S_TOP, group: G_TOP, mask: bits(TOP.hoodie) });
+  add(new THREE.SphereGeometry(1, lo(10, 6), lo(5, 3), 0, Math.PI * 2, 0, Math.PI / 2).scale(0.13, 0.08, 0.11).translate(0, 1.43, -0.085), { slot: S_TOP, group: G_TOP, mask: bits(TOP.hoodie) });
   add(new THREE.BoxGeometry(0.12, 0.62, 0.236).rotateZ(-0.6).translate(0, 1.2, 0), { slot: S_LOWER, group: G_TOP, mask: bits(TOP.saree) });
   add(box(0.17, 0.5, 0.02, 0.085, 1.17, -0.118), { slot: S_LOWER, group: G_TOP, mask: bits(TOP.saree) });
   add(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 8).translate(0, 1.5, 0), { slot: S_SKIN });
@@ -106,23 +117,23 @@ function build(kid: boolean): THREE.BufferGeometry {
 
   // ---- hair
   const capped = bits(HAIR.short, HAIR.long, HAIR.bun, HAIR.ponytail, HAIR.bob);
-  head(new THREE.SphereGeometry(1, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.52).scale(0.1, 0.125, 0.112).rotateX(-0.3).translate(0, 1.625, -0.005),
+  head(new THREE.SphereGeometry(1, lo(12, 7), lo(7, 4), 0, Math.PI * 2, 0, Math.PI * 0.52).scale(0.1, 0.125, 0.112).rotateX(-0.3).translate(0, 1.625, -0.005),
     { slot: S_HAIR, group: G_HAIR, mask: capped });
-  head(new THREE.SphereGeometry(1, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.52).scale(0.096, 0.117, 0.106).rotateX(-0.3).translate(0, 1.622, 0),
+  head(new THREE.SphereGeometry(1, lo(12, 7), lo(7, 4), 0, Math.PI * 2, 0, Math.PI * 0.52).scale(0.096, 0.117, 0.106).rotateX(-0.3).translate(0, 1.622, 0),
     { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.buzz) });
   head(box(0.19, 0.3, 0.05, 0, 1.5, -0.088), { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.long) });
   head(new THREE.CylinderGeometry(0.112, 0.118, 0.15, 12, 1, true, Math.PI * 0.3, Math.PI * 1.4).translate(0, 1.565, -0.005),
     { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.bob) });
   head(ball(0.056, 0, 1.665, -0.105), { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.bun) });
   head(seg(0.035, 1.4, 1.62, 0, -0.12), { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.ponytail) });
-  head(new THREE.IcosahedronGeometry(1, 1).scale(0.118, 0.108, 0.122).translate(0, 1.66, -0.015), { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.curly) });
+  head(new THREE.IcosahedronGeometry(1, lo(1, 0)).scale(0.118, 0.108, 0.122).translate(0, 1.66, -0.015), { slot: S_HAIR, group: G_HAIR, mask: bits(HAIR.curly) });
 
   // ---- headwear
-  head(new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.106, 0.085, 0.113).translate(0, 1.66, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.cap) });
+  head(new THREE.SphereGeometry(1, lo(12, 7), lo(6, 3), 0, Math.PI * 2, 0, Math.PI / 2).scale(0.106, 0.085, 0.113).translate(0, 1.66, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.cap) });
   head(new THREE.BoxGeometry(0.15, 0.012, 0.1).rotateX(0.12).translate(0, 1.665, 0.125), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.cap) });
-  head(new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.11, 0.095, 0.115).translate(0, 1.665, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.sunhat) });
+  head(new THREE.SphereGeometry(1, lo(12, 7), lo(6, 3), 0, Math.PI * 2, 0, Math.PI / 2).scale(0.11, 0.095, 0.115).translate(0, 1.665, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.sunhat) });
   head(new THREE.CylinderGeometry(0.24, 0.24, 0.012, 16).translate(0, 1.672, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.sunhat) });
-  head(new THREE.SphereGeometry(1, 14, 9, Math.PI / 2 + 0.7, Math.PI * 2 - 1.4).scale(0.108, 0.128, 0.118).translate(0, 1.615, -0.004), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.hijab) });
+  head(new THREE.SphereGeometry(1, lo(14, 8), lo(9, 5), Math.PI / 2 + 0.7, Math.PI * 2 - 1.4).scale(0.108, 0.128, 0.118).translate(0, 1.615, -0.004), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.hijab) });
   head(new THREE.CylinderGeometry(0.1, 0.235, 0.21, 14, 1, true).scale(1, 1, 0.85).translate(0, 1.44, 0), { slot: S_ACCENT, group: G_HEAD, mask: bits(HEAD.hijab) });
   head(box(0.155, 0.03, 0.025, 0, 1.633, 0.1), { slot: S_FIXED, hex: 0x111214, group: G_ACC, mask: ACC.sunglasses });
 
@@ -133,7 +144,7 @@ function build(kid: boolean): THREE.BufferGeometry {
     add(ball(0.05, 0.195 * s, 1.395, 0), { slot: S_SKIN, limb, group: G_TOP, mask: bits(TOP.vest) });
     add(seg(0.046, 1.115, 1.42, x), { slot: S_SKIN, limb, joint: 0 });
     add(seg(0.04, 0.87, 1.135, x), { slot: S_SKIN, limb, joint: 1 });
-    add(new THREE.SphereGeometry(0.044, 7, 5).scale(0.75, 1.15, 0.95).translate(x, 0.83, 0.005), { slot: S_SKIN, limb, joint: 1 });
+    add(new THREE.SphereGeometry(0.044, lo(7, 5), lo(5, 3)).scale(0.75, 1.15, 0.95).translate(x, 0.83, 0.005), { slot: S_SKIN, limb, joint: 1 });
     add(seg(0.058, 1.24, 1.44, x), { slot: S_TOP, limb, joint: 0, group: G_TOP, mask: bits(TOP.tshirt, TOP.saree) });
     add(seg(0.056, 1.1, 1.44, x), { slot: S_TOP, limb, joint: 0, group: G_TOP, mask: bits(TOP.shirt, TOP.hoodie) });
     add(seg(0.049, 0.9, 1.14, x), { slot: S_TOP, limb, joint: 1, group: G_TOP, mask: bits(TOP.shirt, TOP.hoodie) });
@@ -150,17 +161,18 @@ function build(kid: boolean): THREE.BufferGeometry {
   add(box(0.036, 0.072, 0.009, -0.215, 0.81, 0.03), { slot: S_FIXED, hex: 0x101014, limb: 4, joint: 1, group: G_ACC, mask: ACC.phone });
   // umbrella: built pointing down from the hand; the raised forearm turns it upright
   add(new THREE.CylinderGeometry(0.008, 0.008, 0.8, 4).translate(-0.215, 0.43, 0.01), { slot: S_FIXED, hex: 0x222222, limb: 4, joint: 1, group: G_ACC, mask: ACC.umbrella });
-  add(new THREE.ConeGeometry(0.5, 0.2, 12).rotateX(Math.PI).translate(-0.215, 0.13, 0.01), { slot: S_ACCENT, limb: 4, joint: 1, group: G_ACC, mask: ACC.umbrella });
+  add(new THREE.ConeGeometry(0.5, 0.2, lo(12, 7)).rotateX(Math.PI).translate(-0.215, 0.13, 0.01), { slot: S_ACCENT, limb: 4, joint: 1, group: G_ACC, mask: ACC.umbrella });
   add(box(0.17, 0.22, 0.08, 0.215, 0.69, 0), { slot: S_FIXED, hex: 0xf1ece0, limb: 3, joint: 1, group: G_ACC, mask: ACC.shoppingBag });
 
   const g = mergeGeometries(parts)!;
   g.computeBoundingSphere();
+  LOW = false;
   return g;
 }
 
 const INJECT_DECL = /* glsl */ `
 attribute vec4 aPart;
-attribute vec4 aAnim; // phase, swing amplitude, upper-body bend, arm reach
+attribute vec4 aAnim; // phase, swing amplitude, upper-body bend, arm reach (10 + t: waving down a ride)
 attribute vec4 aOpt;  // styles: lower, top, hair, head
 attribute vec4 aColA; // palette: skin, top, lower, hair
 attribute vec4 aColB; // palette: accent, shoes; figure (0 male .. 1 female); stoop
@@ -197,9 +209,14 @@ void pose(inout vec3 p, inout vec3 n) {
     p = pRot(p, ${HIP_Y.toFixed(3)}, a); n = nRot(n, a);
   } else if (limb > 2.5) {
     float dir = limb > 3.5 ? 1.0 : -1.0;
-    float sh = sw * dir * 0.8 - aAnim.w;
+    float wave = aAnim.w > 9.5 ? aAnim.w - 10.0 : -1.0;
+    float sh = sw * dir * 0.8 - (wave >= 0.0 ? 0.0 : aAnim.w);
     float el = -(0.2 + 0.45 * amp);
-    if (limb > 3.5) {
+    if (wave >= 0.0 && limb > 3.5) {
+      // right arm up, hand flapping: hailing a tuk-tuk
+      sh = -2.35 + 0.22 * sin(wave * 6.0);
+      el = -0.55 - 0.4 * sin(wave * 6.0 + 1.2);
+    } else if (limb > 3.5) {
       // right hand holds an umbrella up, or a phone in front
       if (mod(floor(aAcc / 16.0), 2.0) > 0.5) { sh = -0.55; el = -2.45; }
       else if (mod(floor(aAcc / 8.0), 2.0) > 0.5) { sh = -0.12 + sw * 0.05; el = -1.45; }
@@ -257,10 +274,11 @@ export function personDepthMaterial(): THREE.MeshDepthMaterial {
   return m;
 }
 
-const cache = new Map<boolean, THREE.BufferGeometry>();
-/** a fresh copy per mesh (each mesh adds its own instance attributes) */
-export function personGeometry(kid: boolean) {
-  let g = cache.get(kid);
-  if (!g) cache.set(kid, (g = build(kid)));
+const cache = new Map<string, THREE.BufferGeometry>();
+/** a fresh copy per mesh (each mesh adds its own instance attributes); `low` is the far-away version */
+export function personGeometry(kid: boolean, low = false) {
+  const k = `${kid}-${low}`;
+  let g = cache.get(k);
+  if (!g) cache.set(k, (g = build(kid, low)));
   return g.clone();
 }

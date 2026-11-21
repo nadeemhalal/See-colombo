@@ -7,8 +7,11 @@ import { personDepthMaterial, personGeometry, personMaterial } from './models';
 import { kidLook, looks, soloLook, visitorKid, type Look } from './looks';
 
 interface Ped {
+  /** 0 adult, 1 child (which body) */
   mesh: number;
   inst: number;
+  /** per-person shader inputs: styles (4), palette A (4), palette B (4), accessory bits (1) */
+  attrs: Float32Array;
   edge: number; // -1 = inactive
   s: number;
   side: number; // +1 left pavement, -1 right pavement (relative to the edge direction)
@@ -32,12 +35,25 @@ interface Ped {
    * place relative to the leader (m, leader's left and forward), and whether they've split up */
   gid: number; leader: number; ox: number; oz: number; detached: boolean;
   followers: number[];
+  /** taxi fare: 0 no, 1 waiting at the kerb waving, 2 riding in the player's tuk-tuk (not drawn) */
+  fare: number;
 }
 
 export interface Threat { x: number; z: number; heading: number; speed: number }
 
 // adults and children are two instanced meshes (two draw calls for everyone)
 const ADULTS = 150, KIDS = 40, COUNT = ADULTS + KIDS;
+/** people closer than this (m) get the detailed body and cast shadows */
+const NEAR_DETAIL = 40;
+
+interface Layer {
+  mesh: THREE.InstancedMesh;
+  opt: THREE.InstancedBufferAttribute; colA: THREE.InstancedBufferAttribute; colB: THREE.InstancedBufferAttribute;
+  acc: THREE.InstancedBufferAttribute; anim: THREE.InstancedBufferAttribute;
+  /** which person is in each slot (attributes are only copied when that changes) */
+  occ: Int32Array;
+  n: number; dirty: boolean;
+}
 const SPAWN_MIN = 25, SPAWN_MAX = 170, DESPAWN = 210;
 const PAVE_Y = 0.04;
 const R = 0.3;
@@ -56,8 +72,9 @@ export class Pedestrians {
   group = new THREE.Group();
   peds: Ped[] = [];
   graph: RoadGraph;
-  private meshes: THREE.InstancedMesh[] = [];
-  private anim: THREE.InstancedBufferAttribute[] = [];
+  /** per body (adult, child): a detailed layer for people near the player and a simple one, without
+   * shadows, for everyone further away. People who are out are packed into them every frame. */
+  private layers: Layer[][] = [];
   private hash = new Map<number, number[]>();
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -120,8 +137,8 @@ export class Pedestrians {
       const slow = Math.min(...g.map((m) => m.look.speed));
       g.forEach((m, j) => {
         const mesh = m.kid ? 1 : 0;
-        const ped: Ped = { mesh, inst: perMesh[mesh].length, edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
-          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0,
+        const ped: Ped = { mesh, inst: perMesh[mesh].length, attrs: new Float32Array(13), edge: -1, s: 0, side: 1, lat: 0, speed: 0, x: 0, z: 0, heading: 0,
+          phase: rand() * 6.28, amp: 0, idleT: 0, fleeT: 0, fx: 0, fz: 0, downT: 0, fall: 0, vx: 0, vz: 0, runT: 0, bend: 0, reach: 0, fare: 0,
           scale: m.look.height / 1.73, girth: m.look.girth, speedMul: j === 0 ? slow : m.look.speed,
           gid: solo ? -1 : gi, leader: j === 0 ? -1 : leaderIdx, ox: m.ox, oz: m.oz, detached: false, followers: [] };
         if (j > 0) this.peds[leaderIdx].followers.push(this.peds.length);
@@ -139,29 +156,34 @@ export class Pedestrians {
     const depth = personDepthMaterial();
     perMesh.forEach((list, mi) => {
       const n = list.length;
-      const geo = personGeometry(mi === 1);
-      const opt = new Float32Array(n * 4), colA = new Float32Array(n * 4), colB = new Float32Array(n * 4), acc = new Float32Array(n);
-      list.forEach(({ look: l }, i) => {
-        opt.set([l.lower, l.top, l.hair, l.head], i * 4);
-        colA.set([ci(l.skin), ci(l.topC), ci(l.lowerC), ci(l.hairC)], i * 4);
-        colB.set([ci(l.accent), ci(l.shoe), l.fem, l.stoop], i * 4);
-        acc[i] = l.acc;
-      });
-      geo.setAttribute('aOpt', new THREE.InstancedBufferAttribute(opt, 4));
-      geo.setAttribute('aColA', new THREE.InstancedBufferAttribute(colA, 4));
-      geo.setAttribute('aColB', new THREE.InstancedBufferAttribute(colB, 4));
-      geo.setAttribute('aAcc', new THREE.InstancedBufferAttribute(acc, 1));
-      const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
-      anim.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aAnim', anim);
-      const mesh = new THREE.InstancedMesh(geo, mat, n);
-      mesh.customDepthMaterial = depth;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
-      this.meshes.push(mesh);
-      this.anim.push(anim);
-      this.group.add(mesh);
+      for (const { look: l, ped } of list) {
+        ped.attrs = new Float32Array([l.lower, l.top, l.hair, l.head, ci(l.skin), ci(l.topC), ci(l.lowerC), ci(l.hairC), ci(l.accent), ci(l.shoe), l.fem, l.stoop, l.acc]);
+      }
+      const layers: Layer[] = [];
+      for (const low of [false, true]) {
+        const geo = personGeometry(mi === 1, low);
+        const dyn = (size: number) => {
+          const a = new THREE.InstancedBufferAttribute(new Float32Array(n * size), size);
+          a.setUsage(THREE.DynamicDrawUsage);
+          return a;
+        };
+        const L: Layer = { mesh: null!, opt: dyn(4), colA: dyn(4), colB: dyn(4), acc: dyn(1), anim: dyn(4), occ: new Int32Array(n).fill(-1), n: 0, dirty: false };
+        geo.setAttribute('aOpt', L.opt);
+        geo.setAttribute('aColA', L.colA);
+        geo.setAttribute('aColB', L.colB);
+        geo.setAttribute('aAcc', L.acc);
+        geo.setAttribute('aAnim', L.anim);
+        const mesh = new THREE.InstancedMesh(geo, mat, n);
+        mesh.customDepthMaterial = depth;
+        mesh.castShadow = !low; // far away, a person's shadow is a few pixels
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        mesh.count = 0;
+        L.mesh = mesh;
+        layers.push(L);
+        this.group.add(mesh);
+      }
+      this.layers.push(layers);
     });
     for (const p of this.peds) if (p.leader < 0) this.spawn(p, start, 4, SPAWN_MAX);
   }
@@ -301,6 +323,74 @@ export class Pedestrians {
     return true;
   }
 
+  // ---------------------------------------------------------------- taxi fares
+
+  /**
+   * Pick someone walking on their own 50-170 m from (x, z), preferably ahead along `heading`, on a
+   * pavement beside a real road, to stand at the kerb and wave down the player's tuk-tuk.
+   * Returns their index, or -1 if nobody suitable is around.
+   */
+  hail(x: number, z: number, heading: number): number {
+    const hx = Math.sin(heading), hz = Math.cos(heading);
+    let best = -1, bestScore = -Infinity;
+    this.peds.forEach((p, i) => {
+      if (p.edge < 0 || p.mesh !== 0 || p.gid >= 0 || p.downT > 0 || p.runT > 0 || p.fleeT > 0 || p.fare) return;
+      const cls = this.graph.edges[p.edge].cls;
+      if (cls === FOOTWAY || cls === SERVICE) return;
+      const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz);
+      if (d < 50 || d > 170) return;
+      const score = (dx * hx + dz * hz) / d + rand() * 0.6;
+      if (score > bestScore) { bestScore = score; best = i; }
+    });
+    if (best >= 0) {
+      const p = this.peds[best];
+      p.fare = 1; p.idleT = 0; p.amp = 0;
+    }
+    return best;
+  }
+
+  /** where a fare is, and whether they're still waiting (false once knocked down or gone) */
+  fareAt(i: number) {
+    const p = this.peds[i];
+    return { x: p.x, z: p.z, waiting: p.fare === 1 && p.edge >= 0 && p.downT <= 0 };
+  }
+
+  /** the fare gets in: they disappear into the tuk-tuk */
+  boardFare(i: number) {
+    const p = this.peds[i];
+    p.fare = 2; p.edge = -1; p.reach = 0;
+  }
+
+  /** the fare gets out at (x, z) and walks off, away from the tuk-tuk at (fromX, fromZ) */
+  dropFare(i: number, x: number, z: number, fromX: number, fromZ: number) {
+    const p = this.peds[i];
+    p.fare = 0; p.reach = 0;
+    p.x = x; p.z = z;
+    p.heading = Math.atan2(x - fromX, z - fromZ);
+    p.fleeT = 0; p.idleT = 0; p.downT = 0; p.runT = 0;
+    if (!this.reattach(p, fromX, fromZ)) p.edge = -1;
+  }
+
+  /** the fare is called off (the player gave up): they carry on walking */
+  releaseFare(i: number) {
+    const p = this.peds[i];
+    if (p.fare === 2) { p.fare = 0; p.edge = -1; return; }
+    p.fare = 0; p.reach = 0;
+  }
+
+  /** standing at the kerb facing the road, waving */
+  private waitForRide(p: Ped, dt: number) {
+    const e = this.graph.edges[p.edge];
+    const face = Math.atan2(-e.dz * p.side, e.dx * p.side);
+    let dh = face - p.heading;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    p.heading += dh * Math.min(1, 4 * dt);
+    p.amp = Math.max(0, p.amp - dt * 4);
+    p.phase += dt;
+    // the shader waves at 6 rad/s; wrap so the float stays small
+    p.reach = 10 + ((p.phase * 6) % (Math.PI * 2)) / 6;
+  }
+
   /** collision circles for the player and the traffic */
   circles(out: Circle[] = []): Circle[] {
     for (const p of this.peds) if (p.edge >= 0) out.push({ x: p.x, z: p.z, r: R * p.scale });
@@ -360,6 +450,9 @@ export class Pedestrians {
     this.peds.forEach((p, i) => {
       // thin out at night by parking the higher indices
       // (companions go with their leader)
+      if (p.fare === 2) return; // in the player's tuk-tuk
+      if (p.fare === 1 && p.downT <= 0 && p.edge >= 0) { this.waitForRide(p, dt); return; }
+      if (p.fare === 1) p.fare = 0; // knocked down or gone: the fare is off
       const wanted = ((p.leader >= 0 ? p.leader : i) * 7919) % COUNT < active;
       if (!wanted) { p.edge = -1; return; }
       let moving = 0;
@@ -536,12 +629,12 @@ export class Pedestrians {
       p.phase += dt * (moving > 0.1 ? 2.4 + moving * 2.6 : 0);
     });
 
-    // write instances
-    for (const p of this.peds) {
-      const mesh = this.meshes[p.mesh];
-      if (p.edge < 0) {
-        this.m4.makeScale(0, 0, 0);
-      } else {
+    // write instances: everyone who is out goes into the near or far layer of their body
+    for (const ls of this.layers) for (const L of ls) { L.n = 0; L.dirty = false; }
+    for (let i = 0; i < this.peds.length; i++) {
+      const p = this.peds[i];
+      if (p.edge < 0) continue;
+      {
         this.q.setFromAxisAngle(this.up, p.heading);
         let y = PAVE_Y;
         if (p.fall > 0) {
@@ -552,12 +645,26 @@ export class Pedestrians {
         }
         this.m4.compose(this.v.set(p.x, y, p.z), this.q, this.sc.set(p.scale * p.girth, p.scale, p.scale * p.girth));
       }
-      mesh.setMatrixAt(p.inst, this.m4);
-      this.anim[p.mesh].setXYZW(p.inst, p.phase, p.amp, p.bend, p.reach);
+      const near = Math.hypot(p.x - player.x, p.z - player.z) < NEAR_DETAIL;
+      const L = this.layers[p.mesh][near ? 0 : 1];
+      const k = L.n++;
+      if (L.occ[k] !== i) {
+        L.occ[k] = i;
+        const a = p.attrs;
+        (L.opt.array as Float32Array).set(a.subarray(0, 4), k * 4);
+        (L.colA.array as Float32Array).set(a.subarray(4, 8), k * 4);
+        (L.colB.array as Float32Array).set(a.subarray(8, 12), k * 4);
+        (L.acc.array as Float32Array)[k] = a[12];
+        L.dirty = true;
+      }
+      L.mesh.setMatrixAt(k, this.m4);
+      L.anim.setXYZW(k, p.phase, p.amp, p.bend, p.reach);
     }
-    for (let i = 0; i < this.meshes.length; i++) {
-      this.meshes[i].instanceMatrix.needsUpdate = true;
-      this.anim[i].needsUpdate = true;
+    for (const ls of this.layers) for (const L of ls) {
+      L.mesh.count = L.n;
+      L.mesh.instanceMatrix.needsUpdate = true;
+      L.anim.needsUpdate = true;
+      if (L.dirty) { L.opt.needsUpdate = true; L.colA.needsUpdate = true; L.colB.needsUpdate = true; L.acc.needsUpdate = true; }
     }
   }
 }
