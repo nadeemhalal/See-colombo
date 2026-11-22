@@ -19,6 +19,7 @@ import { StreetFurniture } from './world/streetFurniture';
 import { Input } from './player/input';
 import { Character } from './player/character';
 import { PlayerController } from './player/controller';
+import { RiggedCharacter, type PlayerFigure } from './player/riggedCharacter';
 import { FollowCamera } from './player/camera';
 import { renderCityMap } from './ui/mapRender';
 import { Minimap } from './ui/minimap';
@@ -107,7 +108,9 @@ async function main() {
 
   // player
   const input = new Input(canvas);
-  const character = new Character();
+  // the rigged model if public/models/player.glb is there, otherwise the built-in shape figure
+  setLoading('Dressing the player…');
+  const character: PlayerFigure = (await RiggedCharacter.load(`${import.meta.env.BASE_URL}models/player.glb`)) ?? new Character();
   scene.add(character.root);
   try { character.setOutfit(Number(localStorage.getItem('seeColombo.outfit') ?? 0) || 0); } catch { /* storage blocked */ }
   let outfitBannerT = 0;

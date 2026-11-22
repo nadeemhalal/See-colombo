@@ -10,8 +10,8 @@ A third-person, open-world walking simulator set in Colombo, Sri Lanka, built fr
 - ~5,400 real building footprints, with heights from OSM where tagged (e.g. Altair 240 m, One Galle Face 194 m)
 - ~9,200 generated "filler" buildings along streets where OSM has no footprints, so blocks aren't empty
 - Procedural Lotus Tower: stepped podium sized to sit clear of the surrounding roads, ribbed green shaft, two layers of lotus petals and an observation deck, with its night light show
-- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. Jointed figure with the player's own face (a portrait texture projected onto the head), short curly hair, a navy palm-print shirt, khaki cargo trousers, white trainers and a wristwatch. Walk and run cycles with knee and ankle motion, hip sway, arm swing, leaning into turns, landing squash, and looking around when idle
-- Five outfits (O to switch, remembered in the browser): palm shirt and cargos (default), office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt
+- Third-person character: jog, sprint, walk, jump, climb low ledges, collides with buildings and trees, can't walk into the sea or lake. A rigged, skinned 3D body (one smooth mesh with a face, hands and hair; CC0 model by Quaternius) played with real animation clips: idle, walk, jog and sprint blended by speed with the feet matched to your pace, jump take-off and mid-air, jab and cross punches on the upper body only (so you can punch while walking), and a seated driving pose. If `public/models/player.glb` is missing, the game falls back to the older built-from-shapes figure with the player's own face
+- Five outfits (O to switch, remembered in the browser): palm shirt and cargos (default), office shirt and trousers, sarong and white shirt, t-shirt and jeans, batik shirt. On the rigged body the clothes are painted on by which bones each part of the skin follows (torso and upper arms = short-sleeved shirt, hips and legs = trousers, feet = shoes), so outfits change colour and print but not shape
 - Over-the-shoulder camera that pulls in when a wall is in the way
 - Real sun position for Colombo, a full day every 10 real minutes (T for 10x faster), lit windows and shop signboards at night
 - Colombo street fronts: low commercial blocks are split into narrow shophouse plots facing the street, each with its own paint colour, a false-front parapet of its own height and often a corrugated sheet or tarp awning over the pavement (deep ones on thin posts). Apartment blocks get balconies with solid or steel-railing fronts on their street sides. Colonial buildings in Fort and Pettah get a columned verandah with a balustrade along the pavement. Buildings over 40 m are modern towers with curtain walls or ribbon windows and a plant-room crown. Flat roofs carry the stairwell head-room box, and split AC units hang under some windows
@@ -58,6 +58,16 @@ This runs three steps:
 
 Map area, origin and landmark list are in [scripts/config.ts](scripts/config.ts).
 
+### Player model
+
+`public/models/player.glb` (about 1.1 MB) is committed: one rigged body, a hairstyle and the 11 animation clips the game uses. It is built by [scripts/build-player.ts](scripts/build-player.ts) from two free CC0 packs by Quaternius, which aren't in the repo: [Universal Base Characters](https://quaternius.itch.io/universal-base-characters) and [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (the free "Standard" downloads).
+
+```powershell
+npm run model -- --anims "<path>\AnimationLibrary_Godot_Standard.glb" --body "<path>\Superhero_Male_FullBody.gltf" --part "<path>\Hair_SimpleParted.gltf"
+```
+
+The script keeps only the needed clips, maps the animation bones (Rigify `DEF-` names) onto the body's Unreal-style names (`pelvis`, `upperarm_l`, ...), merges the hair onto the body's skeleton, and shrinks textures to 1K WebP. To use your own character, rig it to either bone naming scheme and pass it as `--body`. Clip names the game looks for are listed in [src/player/riggedCharacter.ts](src/player/riggedCharacter.ts). Credits are in [public/models/CREDITS.txt](public/models/CREDITS.txt).
+
 ## Controls
 
 | Key | Action |
@@ -93,11 +103,12 @@ scripts/            map data pipeline (Node, run with tsx)
   config.ts         map area, origin, landmark list
   fetch-osm.ts      Overpass download
   build-city.ts     OSM -> city.json, filler buildings, trees, landmarks
+  build-player.ts   rigged body + hair + animation clips -> public/models/player.glb
 src/
   types.ts          city.json format (shared by scripts and game)
   main.ts           game setup and main loop
   world/            ground, water, roads, buildings, trees, Lotus Tower, sky/sun, collision, land mask
-  player/           input, character model and animation, movement, camera
+  player/           input, rigged character (riggedCharacter.ts) and the fallback shape figure, movement, camera
   game/             tuk-tuk taxi jobs
   traffic/          road graph, vehicle models, traffic simulation
   people/           pedestrian models (shader-animated) and simulation
@@ -105,6 +116,7 @@ src/
   audio.ts          synthesised engine, horn and bump sounds
   ui/               minimap, full map, HUD
 public/data/city.json   generated map (about 9.6 MB)
+public/models/player.glb  rigged player body, hair and animations (about 1.1 MB, CC0)
 ```
 
 ## Coordinates
@@ -115,7 +127,8 @@ A debug handle is available in the browser console: `seeColombo.travel(x, z)`, `
 
 ## Known limitations
 
-- The character is still made from simple shapes. The face is a photo projected from the front, so it looks right from the front and fades to plain skin at the sides; it does not move (no blinking or talking). A rigged, sculpted model would look more realistic but needs a licensed or commissioned asset.
+- The player model is a placeholder: the free Quaternius "Superhero" base body (athletic build, stylised face), not a likeness of the player. Clothes are painted onto the skin, so a sarong has the same shape as trousers and shirts are skin-tight. A model of your own can replace it (see "Player model" above).
+- The rigged body has no facial animation (no blinking or talking) and no separate pose for handlebars or a car seat; every vehicle uses the same driving pose.
 - Filler buildings are guesses. They follow streets but won't match real buildings.
 - Building heights without OSM tags are estimated from footprint size and area.
 - Ground is flat (Colombo is mostly 0 to 10 m). Elevation data is planned for v0.3.

@@ -41,7 +41,7 @@ const HAIR = 0x15110e;
 
 /** Navy camp-shirt fabric with faded palm-tree silhouettes, drawn once on a canvas. */
 let palmTexture: THREE.CanvasTexture | null = null;
-function palmFabric() {
+export function palmFabric() {
   if (palmTexture) return palmTexture;
   const c = document.createElement('canvas');
   c.width = c.height = 256;

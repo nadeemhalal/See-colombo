@@ -1,0 +1,8 @@
+player.glb
+
+Body (Superhero_Male_FullBody), hairstyle (Hair_SimpleParted) and animations
+(Universal Animation Library, Standard) by Quaternius - https://quaternius.com
+License: CC0 1.0 Universal (public domain). No attribution required; credited with thanks.
+
+Built with: npm run model -- --anims <AnimationLibrary_Godot_Standard.glb>
+  --body <Superhero_Male_FullBody.gltf> --part <Hair_SimpleParted.gltf>
